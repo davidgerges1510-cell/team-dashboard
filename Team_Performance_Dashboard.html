@@ -1,0 +1,2307 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Team Performance Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#F1F5F9;color:#1E293B;min-height:100vh;overflow-x:hidden}
+:root{
+  --navy:#1E3A5F;--teal:#028090;--lgray:#F1F5F9;--mgray:#E2E8F0;
+  --dgray:#64748B;--green:#16A34A;--red:#DC2626;--amber:#D97706;--purple:#7C3AED
+}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeInUp{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes slideInRight{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(.93)}to{opacity:1;transform:scale(1)}}
+@keyframes barGrow{from{width:0}to{width:var(--target-w)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(2,128,144,.35)}50%{box-shadow:0 0 0 8px rgba(2,128,144,0)}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+@keyframes gradientShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes countUp{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+@keyframes popIn{0%{transform:scale(0)}60%{transform:scale(1.1)}100%{transform:scale(1)}}
+@keyframes tabLine{from{width:0}to{width:100%}}
+@keyframes rowIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:translateX(0)}}
+@keyframes outlierGlow{0%,100%{text-shadow:0 0 0 transparent;color:inherit}50%{text-shadow:0 0 10px rgba(220,38,38,.7),0 0 20px rgba(220,38,38,.3);color:#DC2626}}
+@keyframes outlierRowFlash{0%,100%{background:inherit}50%{background:rgba(254,226,226,.45)}}
+.outlier-name{animation:outlierGlow 2.2s ease infinite;font-weight:800 !important;color:#DC2626 !important}
+.outlier-row{animation:outlierRowFlash 2.2s ease infinite !important}
+.outlier-pill{display:inline-flex;align-items:center;gap:3px;background:#FEE2E2;color:#B91C1C;
+  border-radius:5px;font-size:9px;font-weight:800;padding:1px 6px;margin-left:5px;
+  vertical-align:middle;animation:popIn .3s ease}
+
+/* ── TOPBAR ── */
+.topbar{
+  background:linear-gradient(135deg,#0f2a4a 0%,#1E3A5F 40%,#0a4a6b 70%,#028090 100%);
+  background-size:300% 300%;
+  animation:gradientShift 8s ease infinite;
+  padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;
+  flex-wrap:wrap;gap:8px;min-height:62px;
+  box-shadow:0 3px 20px rgba(0,0,0,.25);
+}
+.topbar h1{font-size:18px;font-weight:800;color:#fff;letter-spacing:-.3px;
+  animation:slideInLeft .5s ease}
+.topbar p{font-size:11px;color:#8FA8C8;margin-top:1px;animation:fadeIn .8s ease}
+.date-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;animation:slideInRight .5s ease}
+.date-row label{font-size:11px;color:#8FA8C8}
+.date-row input[type=date]{font-size:11px;padding:4px 8px;border-radius:6px;border:1px solid #2A4A6B;
+  background:#16304F;color:#CBD5E1;font-family:inherit;transition:border-color .2s}
+.date-row input[type=date]:focus{outline:none;border-color:var(--teal)}
+.period-pill{background:#16304F;border:1px solid #2A4A6B;border-radius:20px;padding:3px 12px;
+  font-size:11px;color:#8FA8C8;animation:fadeIn 1s ease}
+
+/* ── TABS ── */
+.tabs-wrap{background:#fff;border-bottom:1px solid var(--mgray);padding:0 1.5rem;display:flex;
+  overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,.05);position:sticky;top:0;z-index:100}
+.tab{padding:12px 16px;font-size:12px;cursor:pointer;border-bottom:3px solid transparent;
+  color:var(--dgray);background:none;border-top:none;border-left:none;border-right:none;
+  font-family:inherit;white-space:nowrap;transition:color .2s,border-color .2s;position:relative}
+.tab:hover{color:var(--navy)}
+.tab.active{color:var(--navy);border-bottom-color:var(--teal);font-weight:700}
+.tab.active::after{content:'';position:absolute;bottom:-3px;left:0;width:100%;height:3px;
+  background:var(--teal);animation:tabLine .25s ease}
+
+/* ── CONTENT ── */
+.content{max-width:1500px;margin:0 auto;padding:1.4rem 1.5rem}
+.section{display:none;animation:fadeInUp .35s ease}.section.active{display:block}
+
+/* ── KPI CARDS ── */
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;margin-bottom:1.4rem}
+.kpi-card{
+  background:#fff;border-radius:12px;padding:14px 16px;border-top:4px solid var(--teal);
+  box-shadow:0 2px 8px rgba(0,0,0,.07);cursor:default;
+  transition:transform .25s ease,box-shadow .25s ease;
+  animation:scaleIn .4s ease both;
+}
+.kpi-card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(0,0,0,.12)}
+.kpi-card.pass{border-top-color:var(--green)}.kpi-card.fail{border-top-color:var(--red)}
+.kpi-card .klbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dgray);margin-bottom:4px;font-weight:600}
+.kpi-card .kval{font-size:24px;font-weight:800;color:var(--navy);line-height:1.1;
+  transition:color .3s}
+.kpi-card .ktgt{font-size:10px;margin-top:6px;display:flex;align-items:center;gap:4px}
+.kpi-card.pass .ktgt{color:var(--green)}.kpi-card.fail .ktgt{color:var(--red)}
+.kpi-card .kicon{font-size:9px}
+
+.sdiv{font-size:13px;font-weight:700;color:var(--navy);margin:1.5rem 0 .9rem;
+  padding-bottom:8px;border-bottom:2px solid var(--mgray);display:flex;align-items:center;gap:8px}
+.sdiv span{width:4px;height:16px;background:var(--teal);border-radius:2px;display:inline-block}
+
+/* ── CHARTS ── */
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:1.4rem}
+.chart-card{
+  background:#fff;border-radius:12px;padding:16px;
+  box-shadow:0 2px 8px rgba(0,0,0,.07);
+  transition:transform .25s ease,box-shadow .25s ease;
+  animation:fadeInUp .4s ease both;
+}
+.chart-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
+.chart-card h3{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--dgray);margin-bottom:13px}
+.chart-full{grid-column:1/-1}
+
+/* ── TABLE ── */
+.tbl-wrap{background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  overflow:auto;margin-bottom:1.4rem;animation:fadeInUp .4s ease both}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{background:var(--navy);color:#fff;padding:10px 11px;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;text-align:center;white-space:nowrap;
+  position:sticky;top:0;z-index:2}
+thead th:first-child{text-align:left}
+tbody tr{transition:background .15s}
+tbody tr:nth-child(even){background:#F8FAFC}
+tbody tr:hover{background:#EFF6FF;transform:scale(1.002)}
+tbody td{padding:9px 11px;vertical-align:middle;border-bottom:1px solid #F1F5F9;text-align:center}
+tbody td:first-child{text-align:left}
+.tr-anim{animation:rowIn .3s ease both}
+.acell{display:flex;align-items:center;gap:9px}
+.av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;flex-shrink:0;transition:transform .2s,box-shadow .2s;cursor:default}
+.av:hover{transform:scale(1.15);animation:pulse .8s ease infinite}
+.pb{height:5px;background:#E2E8F0;border-radius:3px;overflow:hidden;margin-top:3px}
+.pf{height:100%;border-radius:3px;transition:width 1s cubic-bezier(.4,0,.2,1);width:0}
+.pf.animated{width:var(--pw)}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;
+  transition:transform .2s}
+.badge:hover{transform:scale(1.05)}
+.bg{background:#DCFCE7;color:#15803D}.ba{background:#FEF3C7;color:#B45309}.br{background:#FEE2E2;color:#B91C1C}
+
+/* ── BUTTONS ── */
+.ar{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
+.btn{
+  padding:7px 15px;font-size:12px;border:1px solid var(--mgray);border-radius:8px;cursor:pointer;
+  background:#fff;color:var(--navy);font-family:inherit;font-weight:600;
+  transition:all .2s;position:relative;overflow:hidden;
+}
+.btn::after{content:'';position:absolute;top:50%;left:50%;width:0;height:0;
+  background:rgba(2,128,144,.15);border-radius:50%;transform:translate(-50%,-50%);
+  transition:width .4s,height .4s}
+.btn:active::after{width:200px;height:200px}
+.btn:hover{background:#F1F5F9;border-color:#CBD5E1;transform:translateY(-1px)}
+.btn-p{background:var(--teal);color:#fff;border-color:var(--teal)}
+.btn-p:hover{background:#01707e;box-shadow:0 4px 12px rgba(2,128,144,.35)}
+.btn-red{background:#FEF2F2;color:var(--red);border-color:#FECACA}
+.btn-sm{padding:4px 10px;font-size:11px}
+.si{width:68px;padding:5px 6px;font-size:12px;border:1px solid var(--mgray);border-radius:7px;
+  background:#fff;color:var(--navy);font-family:inherit;text-align:center;transition:border-color .2s}
+.si:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(2,128,144,.12)}
+.ni{border:1px solid var(--teal);border-radius:7px;padding:3px 8px;font-size:12px;
+  font-family:inherit;color:var(--navy);width:155px}
+.eb{background:none;border:1px solid var(--mgray);border-radius:6px;padding:3px 8px;
+  font-size:10px;cursor:pointer;color:var(--dgray);font-family:inherit;
+  transition:all .15s}
+.eb:hover{background:#F1F5F9;transform:translateY(-1px)}
+
+/* ── KPI MANAGER ── */
+.km{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  margin-bottom:1rem;animation:fadeInUp .35s ease}
+.km h3{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:13px}
+.kpl{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:14px}
+.kpp{display:flex;align-items:center;gap:5px;background:#F1F5F9;border:1px solid var(--mgray);
+  border-radius:20px;padding:5px 12px;font-size:12px;color:var(--navy);
+  transition:all .2s;animation:popIn .3s ease both}
+.kpp:hover{border-color:var(--teal);background:#F0FDFB}
+.kpp.fixed{opacity:.6}
+.kpr{background:none;border:none;cursor:pointer;color:#94A3B8;font-size:14px;line-height:1;
+  padding:0 0 0 2px;transition:color .15s,transform .15s}
+.kpr:hover{color:var(--red);transform:scale(1.2)}
+.akr{display:flex;gap:8px;flex-wrap:wrap}
+.akr input,.akr select{padding:7px 10px;font-size:12px;border:1px solid var(--mgray);
+  border-radius:7px;font-family:inherit;color:var(--navy);background:#fff;transition:border-color .2s}
+.akr input{flex:1;min-width:120px}
+.akr input:focus,.akr select:focus{outline:none;border-color:var(--teal);
+  box-shadow:0 0 0 3px rgba(2,128,144,.12)}
+
+/* ── TARGETS ── */
+.tg{display:grid;grid-template-columns:repeat(auto-fit,minmax(175px,1fr));gap:11px;margin-bottom:1.4rem}
+.tc{background:#fff;border-radius:12px;padding:15px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  transition:transform .2s;animation:scaleIn .35s ease both}
+.tc:hover{transform:translateY(-2px)}
+.tc label{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dgray);
+  display:block;margin-bottom:7px;font-weight:700}
+.tc-r{display:flex;align-items:center;gap:7px}
+.tc input{width:80px;padding:6px 8px;font-size:13px;font-weight:700;border:1px solid var(--mgray);
+  border-radius:7px;color:var(--navy);font-family:inherit;text-align:center;transition:border-color .2s}
+.tc input:focus{outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(2,128,144,.12)}
+.tc .unit{font-size:11px;color:var(--dgray)}
+.tc .dir{font-size:10px;color:var(--dgray);margin-top:5px}
+
+/* ── UPLOAD ── */
+.uda{border:2px dashed var(--mgray);border-radius:12px;padding:2.5rem;text-align:center;
+  cursor:pointer;margin-bottom:1rem;transition:all .2s;animation:fadeInUp .4s ease}
+.uda:hover{border-color:var(--teal);background:#F0FDFB;transform:scale(1.01)}
+.uda h3{font-size:15px;font-weight:700;color:var(--navy);margin-bottom:5px}
+.uda p{font-size:12px;color:var(--dgray)}
+.uda .icon{font-size:2.5rem;margin-bottom:.5rem;display:block}
+
+/* ── SMART ── */
+.sw{display:grid;grid-template-columns:240px 1fr;gap:15px}
+.sal{background:#fff;border-radius:12px;padding:13px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  height:fit-content;position:sticky;top:60px;animation:slideInLeft .4s ease}
+.sal h3{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--dgray);
+  margin-bottom:11px;font-weight:700}
+.sab{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:none;
+  border-radius:8px;cursor:pointer;background:none;font-family:inherit;font-size:12px;
+  color:var(--navy);text-align:left;margin-bottom:3px;transition:all .2s}
+.sab:hover{background:#F1F5F9;transform:translateX(3px)}
+.sab.active{background:#EFF6FF;color:var(--teal);font-weight:700}
+.sr{background:#fff;border-radius:12px;padding:1.6rem;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  animation:fadeInUp .35s ease}
+.sb{display:flex;gap:15px;margin-bottom:1.2rem;padding-bottom:1.2rem;border-bottom:1px solid var(--mgray);
+  animation:slideInLeft .3s ease both}
+.sb:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.sl{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:900;color:#fff;flex-shrink:0;box-shadow:0 4px 12px rgba(0,0,0,.2);
+  transition:transform .2s}
+.sl:hover{transform:scale(1.08) rotate(-3deg)}
+.sbody h4{font-size:12px;font-weight:800;color:var(--navy);margin-bottom:4px}
+.sbody p{font-size:12px;color:var(--dgray);line-height:1.7}
+.shd{display:flex;align-items:center;gap:13px;margin-bottom:1.3rem;
+  padding-bottom:1rem;border-bottom:1px solid var(--mgray)}
+.shd h2{font-size:17px;font-weight:800;color:var(--navy)}
+
+/* ── INSIGHTS ── */
+.ig{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:13px;margin-bottom:1.4rem}
+.ic{background:#fff;border-radius:12px;padding:17px;box-shadow:0 2px 8px rgba(0,0,0,.07);
+  border-left:4px solid var(--teal);transition:all .25s;
+  animation:slideInLeft .35s ease both}
+.ic:hover{transform:translateX(4px);box-shadow:0 6px 20px rgba(0,0,0,.1)}
+.ic.warn{border-left-color:var(--amber)}.ic.danger{border-left-color:var(--red)}
+.ic.success{border-left-color:var(--green)}.ic.info{border-left-color:var(--purple)}
+.ic h4{font-size:12px;font-weight:800;color:var(--navy);margin-bottom:6px}
+.ic p{font-size:12px;color:var(--dgray);line-height:1.65}
+
+/* ── MEETING NOTES ── */
+.mn-card{background:linear-gradient(135deg,#FFFBEB,#FEF9E7);border:1px solid #FDE68A;
+  border-radius:9px;padding:13px;margin-top:13px}
+.mn-card h5{font-size:11px;font-weight:800;color:#92400E;margin-bottom:7px;
+  text-transform:uppercase;letter-spacing:.06em}
+.mn-card p{font-size:11px;color:#78350F;line-height:1.65;white-space:pre-wrap}
+.ai-plan{background:linear-gradient(135deg,#EFF6FF,#EEF2FF);border:1px solid #BFDBFE;
+  border-radius:9px;padding:13px;margin-top:11px;animation:fadeInUp .4s ease}
+.ai-plan h5{font-size:11px;font-weight:800;color:#1E40AF;margin-bottom:9px;
+  text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:6px}
+.ai-plan-body{font-size:12px;color:#1E3A5F;line-height:1.75;white-space:pre-wrap}
+.ai-loading{display:flex;align-items:center;gap:9px;font-size:12px;color:#64748B;padding:10px 0}
+.spin{width:18px;height:18px;border:2px solid #E2E8F0;border-top-color:var(--teal);
+  border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+
+/* ── MODAL ── */
+.mo{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0);
+  z-index:1000;display:none;align-items:center;justify-content:center;
+  transition:background .25s}
+.mo.open{display:flex;background:rgba(0,0,0,.5)}
+.md{background:#fff;border-radius:14px;padding:1.6rem;max-width:580px;width:90%;
+  max-height:88vh;overflow-y:auto;position:relative;
+  transform:scale(.93) translateY(20px);opacity:0;
+  animation:scaleIn .25s ease forwards}
+.md.wide{max-width:740px}
+.md h3{font-size:15px;font-weight:800;color:var(--navy);margin-bottom:1rem}
+.mc{position:absolute;top:13px;right:15px;background:none;border:none;font-size:22px;
+  cursor:pointer;color:#94A3B8;transition:color .15s,transform .2s}
+.mc:hover{color:var(--red);transform:rotate(90deg)}
+.fr{margin-bottom:13px}
+.fr label{display:block;font-size:10px;font-weight:700;color:var(--dgray);
+  text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.fr input,.fr select,.fr textarea{width:100%;padding:8px 11px;font-size:13px;
+  border:1px solid var(--mgray);border-radius:8px;font-family:inherit;color:var(--navy);
+  transition:border-color .2s}
+.fr textarea{min-height:130px;resize:vertical;line-height:1.6}
+.fr input:focus,.fr select:focus,.fr textarea:focus{
+  outline:none;border-color:var(--teal);box-shadow:0 0 0 3px rgba(2,128,144,.12)}
+
+/* ── COMPARE ── */
+.week-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:20px;
+  font-size:12px;font-weight:600;border:1px solid var(--teal);color:var(--teal);
+  background:#F0FDFB;cursor:pointer;transition:all .2s;margin:0 6px 8px 0}
+.week-btn:hover{background:var(--teal);color:#fff;transform:translateY(-2px)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--navy);color:#fff;
+  padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;
+  z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.2);
+  animation:slideInRight .3s ease;opacity:0;transition:opacity .3s}
+.toast.show{opacity:1}
+.toast.success{background:#15803D}.toast.error{background:#DC2626}
+
+/* ── PROGRESS BADGE ── */
+.score-ring{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.score-ring svg{transform:rotate(-90deg)}
+.score-ring .val{position:absolute;font-size:10px;font-weight:800;color:var(--navy)}
+
+/* ── SAVE INDICATOR ── */
+.save-btn{
+  display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;
+  font-size:12px;font-weight:700;cursor:pointer;border:none;font-family:inherit;
+  transition:all .2s;
+}
+.save-btn.idle{background:rgba(255,255,255,.15);color:#fff}
+.save-btn.idle:hover{background:rgba(255,255,255,.25);transform:translateY(-1px)}
+.save-btn.saving{background:#D97706;color:#fff;animation:pulse .6s ease infinite}
+.save-btn.saved{background:#16A34A;color:#fff}
+.save-btn.load{background:rgba(255,255,255,.1);color:#8FA8C8;border:1px solid rgba(255,255,255,.15)}
+.save-btn.load:hover{background:rgba(255,255,255,.2);color:#fff}
+.save-status{font-size:10px;color:#8FA8C8;white-space:nowrap}
+
+@media(max-width:700px){.charts-grid,.sw{grid-template-columns:1fr}.content{padding:1rem}}
+@media print{.topbar,.tabs-wrap,.ar,.eb,.si,.btn,.mo{display:none!important}
+  .section{display:block!important}.content{padding:0}body{background:#fff}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>🎯 Team Performance Dashboard</h1>
+    <p>Quality &amp; Operations — Weekly Tracker</p>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <button class="save-btn idle" id="save-btn" onclick="saveManual()" title="Save all data to browser">💾 Save</button>
+    <button class="save-btn load" onclick="exportData()" title="Export as JSON backup file">⬇️ Export</button>
+    <label class="save-btn load" style="cursor:pointer" title="Import JSON backup file">
+      ⬆️ Import<input type="file" accept=".json" style="display:none" onchange="importData(event)">
+    </label>
+    <span class="save-status" id="save-status">—</span>
+  </div>
+  <div class="date-row">
+    <div class="period-pill" id="pp">5 Apr 2026 — 11 Apr 2026</div>
+    <label>From</label><input type="date" id="df" onchange="upPeriod()">
+    <label>To</label><input type="date" id="dt" onchange="upPeriod()">
+  </div>
+</div>
+
+<div class="tabs-wrap">
+  <button class="tab" onclick="switchTab(&#39;overview&#39;)">📊 Overview</button>
+  <button class="tab" onclick="switchTab(&#39;agents&#39;)">👥 Agents</button>
+  <button class="tab active" onclick="switchTab(&#39;kpis&#39;)">⚙️ KPI Manager</button>
+  <button class="tab" onclick="switchTab(&#39;targets&#39;)">🎯 Targets</button>
+  <button class="tab" onclick="switchTab(&#39;compare&#39;)">📅 5-Week Compare</button>
+  <button class="tab" onclick="switchTab(&#39;insights&#39;)">💡 Insights</button>
+  <button class="tab" onclick="switchTab(&#39;smart&#39;)">📋 SMART Reports</button>
+  <button class="tab" onclick="switchTab(&#39;upload&#39;)">📂 Upload Excel</button>
+</div>
+
+<div class="content">
+
+<!-- OVERVIEW -->
+<div id="tab-overview" class="section">
+  <div class="summary-grid" id="sum-cards"><div class="kpi-card pass" style="animation-delay:0s">
+      <div class="klbl">AHT</div>
+      <div class="kval" id="kv-aht">9:49</div>
+      <div class="ktgt"><span class="kicon">✓</span>target ≤ 10:30</div>
+    </div><div class="kpi-card pass" style="animation-delay:0.06s">
+      <div class="klbl">CSAT</div>
+      <div class="kval" id="kv-cast">58%</div>
+      <div class="ktgt"><span class="kicon">✓</span>target ≥ 55%</div>
+    </div><div class="kpi-card fail" style="animation-delay:0.12s">
+      <div class="klbl">Knowledge</div>
+      <div class="kval" id="kv-kop">92.7%</div>
+      <div class="ktgt"><span class="kicon">✗</span>target ≥ 93%</div>
+    </div><div class="kpi-card fail" style="animation-delay:0.18s">
+      <div class="klbl">Retention</div>
+      <div class="kval" id="kv-ret">84.9%</div>
+      <div class="ktgt"><span class="kicon">✗</span>target ≥ 91%</div>
+    </div><div class="kpi-card fail" style="animation-delay:0.24s">
+      <div class="klbl">End of Dialog</div>
+      <div class="kval" id="kv-eod">91.3%</div>
+      <div class="ktgt"><span class="kicon">✗</span>target ≥ 95%</div>
+    </div><div class="kpi-card fail" style="animation-delay:0.3s">
+      <div class="klbl">Creating Query</div>
+      <div class="kval" id="kv-cqs">93.6%</div>
+      <div class="ktgt"><span class="kicon">✗</span>target ≥ 94%</div>
+    </div></div>
+  <div class="sdiv"><span></span>Team Charts</div>
+  <div class="charts-grid">
+    <div class="chart-card chart-full"><h3>Team Radar — Avg vs Targets</h3><canvas id="c-radar" height="0" style="box-sizing: border-box; display: block; height: 0px; width: 0px;" width="0"></canvas></div>
+    <div class="chart-card chart-full"><h3>Overall Score per Agent (% of targets met)</h3><canvas id="c-overall" height="0" style="box-sizing: border-box; display: block; height: 0px; width: 0px;" width="0"></canvas></div>
+  </div>
+  <div class="sdiv"><span></span>KPI Charts — Per Agent</div>
+  <div class="charts-grid" id="kpi-charts"><div class="chart-card"><h3>AHT (mm:ss)</h3><canvas id="c-aht" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div><div class="chart-card"><h3>CSAT (%)</h3><canvas id="c-cast" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div><div class="chart-card"><h3>Knowledge (%)</h3><canvas id="c-kop" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div><div class="chart-card"><h3>Retention (%)</h3><canvas id="c-ret" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div><div class="chart-card"><h3>End of Dialog (%)</h3><canvas id="c-eod" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div><div class="chart-card"><h3>Creating Query (%)</h3><canvas id="c-cqs" height="0" style="display: block; box-sizing: border-box; height: 0px; width: 0px;" width="0"></canvas></div></div>
+  <div class="sdiv"><span></span>Agents Summary Table</div>
+  <div class="tbl-wrap"><table><thead id="ov-head"><tr><th>#</th><th>Agent</th><th>AHT</th><th>CSAT</th><th>Knowledge</th><th>Retention</th><th>End of Dialog</th><th>Creating Query</th><th>Score</th><th>Status</th></tr></thead><tbody id="ov-body"><tr class="tr-anim" style="animation-delay:0s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">1</td>
+      <td><div class="acell">
+        <div class="av" style="background:#DBEAFE;color:#1D4ED8">MK</div>
+        Mike.k
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">8:48</div>
+        <div class="pb"><div class="pf animated" style="--pw:83.8%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">59%</div>
+        <div class="pb"><div class="pf animated" style="--pw:59.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.9%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.9%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">81.8%</div>
+        <div class="pb"><div class="pf animated" style="--pw:81.8%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.9%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.9%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>50%</strong></td>
+      <td><span class="badge ba">Average</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.04s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">2</td>
+      <td><div class="acell">
+        <div class="av" style="background:#DCFCE7;color:#15803D">HA</div>
+        Hayk.A
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">8:50</div>
+        <div class="pb"><div class="pf animated" style="--pw:84.1%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">51%</div>
+        <div class="pb"><div class="pf animated" style="--pw:51.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">88.1%</div>
+        <div class="pb"><div class="pf animated" style="--pw:88.1%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">76.2%</div>
+        <div class="pb"><div class="pf animated" style="--pw:76.2%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.5%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.5%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">85.7%</div>
+        <div class="pb"><div class="pf animated" style="--pw:85.7%;background:#DC2626"></div></div>
+      </td>
+      <td><strong>17%</strong></td>
+      <td><span class="badge br">Needs Support</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.08s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">3</td>
+      <td><div class="acell">
+        <div class="av" style="background:#FEF3C7;color:#B45309">CK</div>
+        Christina.K
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">10:15</div>
+        <div class="pb"><div class="pf animated" style="--pw:97.6%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">60%</div>
+        <div class="pb"><div class="pf animated" style="--pw:60.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>100%</strong></td>
+      <td><span class="badge bg">Top</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.12s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">4</td>
+      <td><div class="acell">
+        <div class="av" style="background:#FCE7F3;color:#9D174D">SJ</div>
+        Sarin.J
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">9:30</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.5%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">48%</div>
+        <div class="pb"><div class="pf animated" style="--pw:48.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">97.7%</div>
+        <div class="pb"><div class="pf animated" style="--pw:97.7%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>83%</strong></td>
+      <td><span class="badge bg">Top</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.16s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">5</td>
+      <td><div class="acell">
+        <div class="av" style="background:#D1FAE5;color:#065F46">PN</div>
+        Pier.N
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">11:25</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">63%</div>
+        <div class="pb"><div class="pf animated" style="--pw:63.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">95.2%</div>
+        <div class="pb"><div class="pf animated" style="--pw:95.2%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">77.4%</div>
+        <div class="pb"><div class="pf animated" style="--pw:77.4%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.3%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.3%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>50%</strong></td>
+      <td><span class="badge ba">Average</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.2s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">6</td>
+      <td><div class="acell">
+        <div class="av" style="background:#EDE9FE;color:#5B21B6">NM</div>
+        Nanor.M
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">8:15</div>
+        <div class="pb"><div class="pf animated" style="--pw:78.6%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">53%</div>
+        <div class="pb"><div class="pf animated" style="--pw:53.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>83%</strong></td>
+      <td><span class="badge bg">Top</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.24s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">7</td>
+      <td><div class="acell">
+        <div class="av" style="background:#FEE2E2;color:#991B1B">AN</div>
+        Ahmad.N
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">11:17</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">65%</div>
+        <div class="pb"><div class="pf animated" style="--pw:65.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.9%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.9%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>67%</strong></td>
+      <td><span class="badge ba">Average</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.28s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">8</td>
+      <td><div class="acell">
+        <div class="av" style="background:#F3F4F6;color:#374151">RA</div>
+        rogeh.A
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">13:48</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">67%</div>
+        <div class="pb"><div class="pf animated" style="--pw:67.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">—</div>
+        <div class="pb"><div class="pf animated" style="--pw:0.0%;background:#94A3B8"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">—</div>
+        <div class="pb"><div class="pf animated" style="--pw:0.0%;background:#94A3B8"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">—</div>
+        <div class="pb"><div class="pf animated" style="--pw:0.0%;background:#94A3B8"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">—</div>
+        <div class="pb"><div class="pf animated" style="--pw:0.0%;background:#94A3B8"></div></div>
+      </td>
+      <td><strong>50%</strong></td>
+      <td><span class="badge ba">Average</span></td>
+    </tr><tr class="tr-anim" style="animation-delay:0.32s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">9</td>
+      <td><div class="acell">
+        <div class="av" style="background:#CFFAFE;color:#0E7490">NB</div>
+        Nareg.B
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">7:48</div>
+        <div class="pb"><div class="pf animated" style="--pw:74.3%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">57%</div>
+        <div class="pb"><div class="pf animated" style="--pw:57.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">88%</div>
+        <div class="pb"><div class="pf animated" style="--pw:88.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.5%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.5%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">100%</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#028090"></div></div>
+      </td>
+      <td><strong>67%</strong></td>
+      <td><span class="badge ba">Average</span></td>
+    </tr><tr class="tr-anim outlier-row" style="animation-delay:0.36s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">10</td>
+      <td><div class="acell">
+        <div class="av" style="background:#F0FDF4;color:#166534">BK</div>
+        <span class="outlier-name">Bilal.K</span><span class="outlier-pill" title="Outlier on: Retention, Creating Query">⚠️ OUTLIER</span>
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">12:38</div>
+        <div class="pb"><div class="pf animated" style="--pw:100.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">52%</div>
+        <div class="pb"><div class="pf animated" style="--pw:52.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">86.4%</div>
+        <div class="pb"><div class="pf animated" style="--pw:86.4%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">50%</div>
+        <div class="pb"><div class="pf animated" style="--pw:50.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">90.9%</div>
+        <div class="pb"><div class="pf animated" style="--pw:90.9%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">77.3%</div>
+        <div class="pb"><div class="pf animated" style="--pw:77.3%;background:#DC2626"></div></div>
+      </td>
+      <td><strong>0%</strong></td>
+      <td><span class="badge br">Needs Support</span></td>
+    </tr><tr class="tr-anim outlier-row" style="animation-delay:0.4s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">11</td>
+      <td><div class="acell">
+        <div class="av" style="background:#FFF7ED;color:#9A3412">AO</div>
+        <span class="outlier-name">Ali.O</span><span class="outlier-pill" title="Outlier on: End of Dialog, Creating Query">⚠️ OUTLIER</span>
+      </div></td>
+      <td>
+        <div style="font-weight:700;font-size:11px">8:29</div>
+        <div class="pb"><div class="pf animated" style="--pw:80.8%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">53%</div>
+        <div class="pb"><div class="pf animated" style="--pw:53.0%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">87.5%</div>
+        <div class="pb"><div class="pf animated" style="--pw:87.5%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">91.7%</div>
+        <div class="pb"><div class="pf animated" style="--pw:91.7%;background:#028090"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">66.7%</div>
+        <div class="pb"><div class="pf animated" style="--pw:66.7%;background:#DC2626"></div></div>
+      </td><td>
+        <div style="font-weight:700;font-size:11px">75%</div>
+        <div class="pb"><div class="pf animated" style="--pw:75.0%;background:#DC2626"></div></div>
+      </td>
+      <td><strong>33%</strong></td>
+      <td><span class="badge br">Needs Support</span></td>
+    </tr></tbody></table></div>
+</div>
+
+<!-- AGENTS -->
+<div id="tab-agents" class="section">
+  <div class="ar">
+    <button class="btn btn-p" onclick="openAddAgent()">+ Add Agent</button>
+    <button class="btn btn-p" onclick="saveAll()">💾 Save</button>
+    <button class="btn" onclick="exportCSV()">📥 Export CSV</button>
+    <button class="btn" onclick="window.print()">🖨 Print</button>
+  </div>
+  <div class="tbl-wrap"><table><thead id="ag-head"><tr><th>#</th><th>Agent</th><th>AHT (mm:ss)</th><th>CSAT (%)</th><th>Knowledge (%)</th><th>Retention (%)</th><th>End of Dialog (%)</th><th>Creating Query (%)</th><th>Score</th><th>Actions</th></tr></thead><tbody id="ag-body"><tr class="tr-anim" style="animation-delay:0s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">1</td>
+    <td><div class="acell" id="nc-0">
+      <div class="av" style="background:#DBEAFE;color:#1D4ED8">MK</div>
+      <span id="nt-0">Mike.k</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="8:48" onchange="upd(0,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="59" onchange="upd(0,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.9" onchange="upd(0,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="81.8" onchange="upd(0,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.9" onchange="upd(0,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(0,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>50%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(0)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Mike.k&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(0)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.04s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">2</td>
+    <td><div class="acell" id="nc-1">
+      <div class="av" style="background:#DCFCE7;color:#15803D">HA</div>
+      <span id="nt-1">Hayk.A</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="8:50" onchange="upd(1,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="51" onchange="upd(1,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="88.1" onchange="upd(1,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="76.2" onchange="upd(1,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.5" onchange="upd(1,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="85.7" onchange="upd(1,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>17%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(1)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Hayk.A&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(1)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.08s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">3</td>
+    <td><div class="acell" id="nc-2">
+      <div class="av" style="background:#FEF3C7;color:#B45309">CK</div>
+      <span id="nt-2">Christina.K</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="10:15" onchange="upd(2,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="60" onchange="upd(2,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(2,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(2,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(2,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(2,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>100%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(2)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Christina.K&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(2)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.12s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">4</td>
+    <td><div class="acell" id="nc-3">
+      <div class="av" style="background:#FCE7F3;color:#9D174D">SJ</div>
+      <span id="nt-3">Sarin.J</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="9:30" onchange="upd(3,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style="background:rgba(254,226,226,.5);"><input class="si" type="number" value="48" onchange="upd(3,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="97.7" onchange="upd(3,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(3,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(3,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(3,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>83%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(3)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Sarin.J&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(3)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.16s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">5</td>
+    <td><div class="acell" id="nc-4">
+      <div class="av" style="background:#D1FAE5;color:#065F46">PN</div>
+      <span id="nt-4">Pier.N</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="11:25" onchange="upd(4,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="63" onchange="upd(4,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="95.2" onchange="upd(4,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="77.4" onchange="upd(4,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.3" onchange="upd(4,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(4,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>50%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(4)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Pier.N&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(4)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.2s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">6</td>
+    <td><div class="acell" id="nc-5">
+      <div class="av" style="background:#EDE9FE;color:#5B21B6">NM</div>
+      <span id="nt-5">Nanor.M</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="8:15" onchange="upd(5,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="53" onchange="upd(5,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(5,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(5,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(5,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(5,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>83%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(5)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Nanor.M&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(5)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.24s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">7</td>
+    <td><div class="acell" id="nc-6">
+      <div class="av" style="background:#FEE2E2;color:#991B1B">AN</div>
+      <span id="nt-6">Ahmad.N</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="11:17" onchange="upd(6,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="65" onchange="upd(6,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(6,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(6,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.9" onchange="upd(6,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(6,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>67%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(6)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Ahmad.N&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(6)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.28s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">8</td>
+    <td><div class="acell" id="nc-7">
+      <div class="av" style="background:#F3F4F6;color:#374151">RA</div>
+      <span id="nt-7">rogeh.A</span>
+    </div></td>
+    <td style="background:rgba(254,226,226,.5);"><input class="si" type="text" value="13:48" onchange="upd(7,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="67" onchange="upd(7,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="" onchange="upd(7,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="" onchange="upd(7,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="" onchange="upd(7,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="" onchange="upd(7,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>50%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(7)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;rogeh.A&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(7)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim" style="animation-delay:0.32s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">9</td>
+    <td><div class="acell" id="nc-8">
+      <div class="av" style="background:#CFFAFE;color:#0E7490">NB</div>
+      <span id="nt-8">Nareg.B</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="7:48" onchange="upd(8,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="57" onchange="upd(8,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="88" onchange="upd(8,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(8,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.5" onchange="upd(8,&#39;eod&#39;,this.value)"></td><td style=""><input class="si" type="number" value="100" onchange="upd(8,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>67%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(8)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Nareg.B&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(8)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim outlier-row" style="animation-delay:0.36s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">10</td>
+    <td><div class="acell" id="nc-9">
+      <div class="av" style="background:#F0FDF4;color:#166534">BK</div>
+      <span class="outlier-name">Bilal.K</span><span class="outlier-pill" title="Retention, Creating Query">⚠️ OUTLIER</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="12:38" onchange="upd(9,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="52" onchange="upd(9,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="86.4" onchange="upd(9,&#39;kop&#39;,this.value)"></td><td style="background:rgba(254,226,226,.5);"><input class="si" type="number" value="50" onchange="upd(9,&#39;ret&#39;,this.value)"></td><td style=""><input class="si" type="number" value="90.9" onchange="upd(9,&#39;eod&#39;,this.value)"></td><td style="background:rgba(254,226,226,.5);"><input class="si" type="number" value="77.3" onchange="upd(9,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>0%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(9)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Bilal.K&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(9)">🗑</button>
+    </td>
+  </tr><tr class="tr-anim outlier-row" style="animation-delay:0.4s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">11</td>
+    <td><div class="acell" id="nc-10">
+      <div class="av" style="background:#FFF7ED;color:#9A3412">AO</div>
+      <span class="outlier-name">Ali.O</span><span class="outlier-pill" title="End of Dialog, Creating Query">⚠️ OUTLIER</span>
+    </div></td>
+    <td style=""><input class="si" type="text" value="8:29" onchange="upd(10,&#39;aht&#39;,this.value,&#39;time&#39;)"></td><td style=""><input class="si" type="number" value="53" onchange="upd(10,&#39;cast&#39;,this.value)"></td><td style=""><input class="si" type="number" value="87.5" onchange="upd(10,&#39;kop&#39;,this.value)"></td><td style=""><input class="si" type="number" value="91.7" onchange="upd(10,&#39;ret&#39;,this.value)"></td><td style="background:rgba(254,226,226,.5);"><input class="si" type="number" value="66.7" onchange="upd(10,&#39;eod&#39;,this.value)"></td><td style="background:rgba(254,226,226,.5);"><input class="si" type="number" value="75" onchange="upd(10,&#39;cqs&#39;,this.value)"></td>
+    <td><strong>33%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(10)">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes(&#39;Ali.O&#39;)">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(10)">🗑</button>
+    </td>
+  </tr></tbody></table></div>
+</div>
+
+<!-- KPI MANAGER -->
+<div id="tab-kpis" class="section active">
+  <div class="km">
+    <h3>Manage KPI Columns</h3>
+    <div class="kpl" id="kpi-list">
+    <div class="kpp fixed" style="animation-delay:0s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>AHT</strong>
+      <span style="color:#94A3B8;font-size:10px">(mm:ss)</span>
+      <button class="kpr" onclick="toggleKPI(0)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(0)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div>
+    <div class="kpp fixed" style="animation-delay:0.05s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>CSAT</strong>
+      <span style="color:#94A3B8;font-size:10px">(%)</span>
+      <button class="kpr" onclick="toggleKPI(1)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(1)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div>
+    <div class="kpp fixed" style="animation-delay:0.1s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>Knowledge</strong>
+      <span style="color:#94A3B8;font-size:10px">(%)</span>
+      <button class="kpr" onclick="toggleKPI(2)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(2)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div>
+    <div class="kpp fixed" style="animation-delay:0.15000000000000002s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>Retention</strong>
+      <span style="color:#94A3B8;font-size:10px">(%)</span>
+      <button class="kpr" onclick="toggleKPI(3)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(3)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div>
+    <div class="kpp fixed" style="animation-delay:0.2s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>End of Dialog</strong>
+      <span style="color:#94A3B8;font-size:10px">(%)</span>
+      <button class="kpr" onclick="toggleKPI(4)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(4)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div>
+    <div class="kpp fixed" style="animation-delay:0.25s" title="Core KPI — deletion requires confirmation">
+      <span style="font-size:10px;margin-right:2px">🔒</span>
+      
+      <strong>Creating Query</strong>
+      <span style="color:#94A3B8;font-size:10px">(%)</span>
+      <button class="kpr" onclick="toggleKPI(5)" title="Hide this KPI">👁</button>
+      <button class="kpr del-kpr" onclick="delKPI(5)" title="Delete KPI permanently" style="color:#F87171;font-size:16px;font-weight:700">×</button>
+    </div></div>
+    <div class="akr">
+      <input type="text" id="nk-name" placeholder="KPI name (e.g. FCR)">
+      <input type="text" id="nk-unit" placeholder="Unit (e.g. %)">
+      <select id="nk-dir"><option value="min">Higher is better</option><option value="max">Lower is better</option></select>
+      <input type="text" id="nk-tgt" placeholder="Target value">
+      <button class="btn btn-p" onclick="addKPI()">+ Add KPI</button>
+    </div>
+  </div>
+  <p style="font-size:12px;color:var(--dgray)">🔒 Core KPIs — type <strong>DELETE</strong> to confirm removal &nbsp;|&nbsp; ✏️ Custom KPIs — one-click delete &nbsp;|&nbsp; 👁 Toggle visibility without deleting</p>
+</div>
+
+<!-- TARGETS -->
+<div id="tab-targets" class="section">
+  <div class="sdiv"><span></span>Set KPI Targets</div>
+  <p style="font-size:12px;color:var(--dgray);margin-bottom:1rem">Targets control chart colors, summary badges, and SMART reports.</p>
+  <div class="tg" id="tgt-grid">
+    <div class="tc" style="animation-delay:0s">
+      <label>AHT</label>
+      <div class="tc-r"><input type="text" id="tgt-aht" value="10:30">
+      <span class="unit">mm:ss</span></div>
+      <div class="dir">⬇️ Lower is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.06s">
+      <label>RR</label>
+      <div class="tc-r"><input type="text" id="tgt-rr" value="36">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.12s">
+      <label>CSAT</label>
+      <div class="tc-r"><input type="text" id="tgt-cast" value="55">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.18s">
+      <label>Knowledge</label>
+      <div class="tc-r"><input type="text" id="tgt-kop" value="93">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.24s">
+      <label>Retention</label>
+      <div class="tc-r"><input type="text" id="tgt-ret" value="91">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.3s">
+      <label>End of Dialog</label>
+      <div class="tc-r"><input type="text" id="tgt-eod" value="95">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.36s">
+      <label>Creating Query</label>
+      <div class="tc-r"><input type="text" id="tgt-cqs" value="94">
+      <span class="unit">%</span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div>
+    <div class="tc" style="animation-delay:0.42s">
+      <label>Clients Mark</label>
+      <div class="tc-r"><input type="text" id="tgt-cm" value="200">
+      <span class="unit"></span></div>
+      <div class="dir">⬆️ Higher is better</div>
+    </div></div>
+  <button class="btn btn-p" onclick="saveTgts()">💾 Save targets</button>
+</div>
+
+<!-- COMPARE -->
+<div id="tab-compare" class="section">
+  <div class="ar">
+    <button class="btn btn-p" onclick="openWeekModal()">+ Save current week</button>
+    <button class="btn" onclick="clearWeeks()">🗑 Clear history</button>
+  </div>
+  <div id="week-tabs"></div>
+  <div id="compare-out"><p style="font-size:13px;color:var(--dgray);text-align:center;padding:2.5rem">Save at least 2 weeks of data to see comparison.</p></div>
+</div>
+
+<!-- INSIGHTS -->
+<div id="tab-insights" class="section">
+  <div class="ar"><button class="btn btn-p" onclick="renderInsights()">🔄 Refresh Insights</button></div>
+  <div id="insights-out"></div>
+</div>
+
+<!-- SMART -->
+<div id="tab-smart" class="section">
+  <div class="ar">
+    <button class="btn btn-p" onclick="genAllSmart()">⚡ Generate all reports</button>
+    <button class="btn" onclick="printSmart()">🖨 Print / Export</button>
+  </div>
+  <div class="sw">
+    <div class="sal">
+      <h3>Select Agent</h3>
+      <button class="sab active" id="sab-team" onclick="showSmartTeam()">
+        <div class="av" style="background:#E0F2FE;color:#0369A1;width:26px;height:26px;font-size:9px">ALL</div>
+        Team Report
+      </button>
+      <div id="smart-agent-btns"></div>
+    </div>
+    <div id="smart-out">
+      <div class="sr" style="text-align:center;color:var(--dgray);font-size:13px;padding:3rem 1.5rem">
+        Click <strong>"Generate all reports"</strong> to create SMART analysis for each agent.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD -->
+<div id="tab-upload" class="section">
+  <div class="sdiv"><span></span>Import Excel / CSV</div>
+  <div class="uda" id="drop-zone" onclick="document.getElementById(&#39;fi&#39;).click()">
+    <span class="icon">📂</span>
+    <h3>Click to upload or drag &amp; drop</h3>
+    <p>Excel (.xlsx, .xls) or CSV · Handles time fractions, decimal %, N/A values · Agent order preserved</p>
+  </div>
+  <input type="file" id="fi" style="display:none" accept=".csv,.xlsx,.xls" onchange="handleFile(event)">
+  <div id="import-panel" style="display:none">
+    <div class="sdiv"><span></span>Column Mapping</div>
+    <div id="mapping-ui"></div>
+  </div>
+  <div id="import-log"></div>
+</div>
+
+</div><!-- /content -->
+
+<!-- MODALS -->
+<div class="mo" id="modal-agent"><div class="md">
+  <button class="mc" onclick="closeMo(&#39;modal-agent&#39;)">×</button>
+  <h3>➕ Add New Agent</h3>
+  <div class="fr"><label>Agent name</label><input type="text" id="na-name" placeholder="e.g. John.D"></div>
+  <div id="na-kpis"></div>
+  <div class="ar" style="margin-top:1rem">
+    <button class="btn btn-p" onclick="confirmAddAgent()">Add agent</button>
+    <button class="btn" onclick="closeMo(&#39;modal-agent&#39;)">Cancel</button>
+  </div>
+</div></div>
+
+<div class="mo" id="modal-week"><div class="md">
+  <button class="mc" onclick="closeMo(&#39;modal-week&#39;)">×</button>
+  <h3>📅 Save current data as a week</h3>
+  <div class="fr"><label>Week label</label><input type="text" id="wk-label" placeholder="e.g. W14 — Apr 7–13"></div>
+  <div class="ar" style="margin-top:1rem">
+    <button class="btn btn-p" onclick="saveWeek()">Save</button>
+    <button class="btn" onclick="closeMo(&#39;modal-week&#39;)">Cancel</button>
+  </div>
+</div></div>
+
+<div class="mo" id="modal-notes"><div class="md wide">
+  <button class="mc" onclick="closeMo(&#39;modal-notes&#39;)">×</button>
+  <h3 id="mn-title">📝 Meeting Notes</h3>
+  <div class="fr">
+    <label>Meeting notes — paste your observations from the 1-on-1 or team meeting</label>
+    <textarea id="mn-text" placeholder="e.g.:
+- Agent showed resistance to feedback on AHT
+- Positive attitude, eager to improve CSAT
+- Mentioned personal challenges affecting focus
+- Agreed to practice objection-handling scripts daily
+- Previous coaching plan not fully followed"></textarea>
+  </div>
+  <div class="ar" style="margin-top:4px">
+    <button class="btn btn-p" onclick="saveNotesAndAnalyze()">🤖 Save &amp; Analyze with AI</button>
+    <button class="btn" onclick="saveNotesOnly()">💾 Save only</button>
+    <button class="btn btn-red" onclick="clearNotes()">🗑 Clear</button>
+  </div>
+  <div id="mn-ai-out"></div>
+</div></div>
+
+<!-- Toast -->
+<div class="toast success" id="toast">🗑 "Clients Mark" deleted</div>
+
+<script>
+
+// ===== SAVE / LOAD SYSTEM =====
+let _saveTimer = null;
+
+function getState() {
+  return { data, targets, kpiDefs, weekHistory, meetingNotes };
+}
+
+function applyState(state) {
+  if (state.data)         data         = state.data;
+  if (state.targets)      targets      = state.targets;
+  if (state.kpiDefs)      kpiDefs      = state.kpiDefs;
+  if (state.weekHistory)  weekHistory  = state.weekHistory;
+  if (state.meetingNotes) meetingNotes = state.meetingNotes;
+}
+
+function saveToLocal() {
+  // Debounce: wait 800ms after last change before actually saving
+  clearTimeout(_saveTimer);
+  setSaveStatus('saving');
+  _saveTimer = setTimeout(() => {
+    try {
+      localStorage.setItem("dashboardData_v2", JSON.stringify(getState()));
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch(e) {
+      setSaveStatus('idle');
+      toast('⚠️ Save failed: storage full?', 'error');
+    }
+  }, 800);
+}
+
+function saveManual() {
+  clearTimeout(_saveTimer);
+  try {
+    localStorage.setItem("dashboardData_v2", JSON.stringify(getState()));
+    setSaveStatus('saved');
+    toast('✅ Data saved successfully!', 'success');
+    setTimeout(() => setSaveStatus('idle'), 3000);
+  } catch(e) {
+    toast('⚠️ Save failed: storage may be full', 'error');
+  }
+}
+
+function loadFromLocal() {
+  // Try new key first, fall back to old key
+  let saved = localStorage.getItem("dashboardData_v2") || localStorage.getItem("dashboardData");
+  if (!saved) return false;
+  try {
+    applyState(JSON.parse(saved));
+    return true;
+  } catch(e) {
+    console.error("Load error:", e);
+    return false;
+  }
+}
+
+function setSaveStatus(state) {
+  const btn = document.getElementById('save-btn');
+  const lbl = document.getElementById('save-status');
+  if (!btn) return;
+  btn.className = 'save-btn ' + state;
+  if (state === 'saving') { btn.textContent = '⏳ Saving…'; lbl.textContent = ''; }
+  else if (state === 'saved') { btn.textContent = '✅ Saved'; lbl.textContent = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+  else { btn.textContent = '💾 Save'; lbl.textContent = localStorage.getItem("dashboardData_v2") ? '(saved)' : '(unsaved)'; }
+}
+
+function exportData() {
+  const json = JSON.stringify(getState(), null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dashboard-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  toast('⬇️ Backup exported!', 'success');
+}
+
+function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const state = JSON.parse(e.target.result);
+      applyState(state);
+      teamOverall = null;
+      saveToLocal();
+      renderOverview();
+      toast('✅ Data imported successfully!', 'success');
+    } catch(err) {
+      toast('❌ Invalid backup file', 'error');
+    }
+  };
+  reader.readAsText(file);
+  // Reset input so same file can be re-imported
+  event.target.value = '';
+}
+
+// Auto-save on any input change
+document.addEventListener("input", saveToLocal);
+
+// ═══════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════
+const AVC=["#DBEAFE","#DCFCE7","#FEF3C7","#FCE7F3","#D1FAE5","#EDE9FE","#FEE2E2","#F3F4F6","#CFFAFE","#F0FDF4","#FFF7ED","#F5F3FF"];
+const AVT=["#1D4ED8","#15803D","#B45309","#9D174D","#065F46","#5B21B6","#991B1B","#374151","#0E7490","#166534","#9A3412","#4C1D95"];
+
+// ─── COL MAP ───────────────────────────────────────────────
+const COL_MAP={
+  name:['agent','name','имя','сотрудник','фио','operator','оператор'],
+  aht: ['aht 10.30 мин','aht 10.30','aht мин','aht','ахт','average handle time','среднее время'],
+  rr:  ['rr 36%','rr 36','rr%','rr','retention rate','ar by operator'],
+  cast:['csat 55%','csat 55','csat%','csat','cast','customer satisfaction','каст'],
+  kop: ['knowledge of project information 93','knowledge of project information','knowledge of project','knowledge','знания','kop'],
+  ret: ['retention \n91','retention\n91','retention 91','retention','ретеншн','удержание'],
+  eod: ['end of dialogue 95','end of dialogue 95','end of dialogue','end of dialog','eod','конец диалога'],
+  cqs: ['creating a query in a software applications\n94','creating a query in a software applications','creating a query','creating query','cqs','запрос в по'],
+  cm:  ['clients mark','client mark','clients mark','mark','оценка клиента','clients'],
+};
+
+// ═══════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════
+let kpiDefs=[
+  {key:'aht', label:'AHT',           unit:'mm:ss',dir:'max',defTgt:'10:30',visible:true,fixed:true},
+  {key:'rr',  label:'RR',            unit:'%',    dir:'min',defTgt:'36',   visible:true,fixed:true},
+  {key:'cast',label:'CSAT',          unit:'%',    dir:'min',defTgt:'55',   visible:true,fixed:true},
+  {key:'kop', label:'Knowledge',     unit:'%',    dir:'min',defTgt:'93',   visible:true,fixed:true},
+  {key:'ret', label:'Retention',     unit:'%',    dir:'min',defTgt:'91',   visible:true,fixed:true},
+  {key:'eod', label:'End of Dialog', unit:'%',    dir:'min',defTgt:'95',   visible:true,fixed:true},
+  {key:'cqs', label:'Creating Query',unit:'%',    dir:'min',defTgt:'94',   visible:true,fixed:true},
+  {key:'cm',  label:'Clients Mark',  unit:'',     dir:'min',defTgt:'200',  visible:true,fixed:true},
+];
+let targets={aht:'10:30',rr:'36',cast:'55',kop:'93',ret:'91',eod:'95',cqs:'94',cm:'200'};
+
+// Data loaded directly from Book11.xlsx — exact values, order preserved
+let data=[
+  {name:"Mike.k",     aht:528, rr:42,   cast:59,  kop:90.9, ret:81.8, eod:90.9, cqs:100,  cm:292},
+  {name:"Hayk.A",     aht:530, rr:34,   cast:51,  kop:88.1, ret:76.2, eod:90.5, cqs:85.7, cm:126},
+  {name:"Christina.K",aht:615, rr:41,   cast:60,  kop:100,  ret:100,  eod:100,  cqs:100,  cm:172},
+  {name:"Sarin.J",    aht:570, rr:33,   cast:48,  kop:97.7, ret:100,  eod:100,  cqs:100,  cm:178},
+  {name:"Pier.N",     aht:685, rr:38,   cast:63,  kop:95.2, ret:77.4, eod:90.3, cqs:100,  cm:399},
+  {name:"Nanor.M",    aht:495, rr:41,   cast:53,  kop:100,  ret:100,  eod:100,  cqs:100,  cm:117},
+  {name:"Ahmad.N",    aht:677, rr:44,   cast:65,  kop:100,  ret:100,  eod:90.9, cqs:100,  cm:274},
+  {name:"rogeh.A",    aht:828, rr:39,   cast:67,  kop:null, ret:null, eod:null, cqs:null, cm:72},
+  {name:"Nareg.B",    aht:468, rr:39,   cast:57,  kop:88.0, ret:100,  eod:90.5, cqs:100,  cm:341},
+  {name:"Bilal.K",    aht:758, rr:42,   cast:52,  kop:86.4, ret:50,   eod:90.9, cqs:77.3, cm:101},
+  {name:"Ali.O",      aht:509, rr:36,   cast:53,  kop:87.5, ret:91.7, eod:66.7, cqs:75,   cm:205},
+];
+
+let weekHistory=[], smartCache={}, meetingNotes={};
+let currentNotesAgent=null;
+let impRaw=null, impDisp=null, impHdrs=[];
+
+// teamOverall: exact values from Excel's Overall row (zero recalculation)
+// These match Book11.xlsx row 27 exactly as computed by Excel's own formulas
+let teamOverall={aht:589, rr:39, cast:58, kop:92.7, ret:84.9, eod:91.3, cqs:93.6, cm:2277};
+
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
+function ini(n){return n.split(/[\s._-]+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase()||'?'}
+function visKPIs(){return kpiDefs.filter(k=>k.visible)}
+
+function str2s(s){
+  s=String(s||'').trim().replace(/[^\d:]/g,'');
+  const p=s.split(':');
+  if(p.length===3)return +p[0]*3600+ +p[1]*60+(+p[2]||0);
+  if(p.length===2)return +p[0]*60+(+p[1]||0);
+  return 0;
+}
+// AHT always displayed as M:SS (max 99:59) — no hours component
+function s2str(sec){
+  sec=Math.round(+sec||0);
+  const m=Math.floor(sec/60), s=sec%60;
+  return m+':'+(s<10?'0':'')+s;
+}
+// Get team-level value for a KPI key: use teamOverall if present, else weighted avg
+function teamVal(key){
+  if(teamOverall&&teamOverall[key]!=null)return teamOverall[key];
+  // Fallback: simple avg of non-null values
+  const v=data.map(d=>d[key]).filter(x=>x!=null&&!isNaN(+x));
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:0;
+}
+function tSec(){return str2s(targets.aht)}
+
+function passKPI(d,kdef){
+  const v=d[kdef.key];
+  if(v===undefined||v===null||isNaN(+v))return null;
+  if(kdef.key==='aht')return v<=tSec();
+  const t=+targets[kdef.key]||0;
+  return kdef.dir==='min'?+v>=t:+v<=t;
+}
+function metPass(d){return visKPIs().map(k=>passKPI(d,k)).filter(v=>v===true).length}
+function totalVis(){return visKPIs().length}
+function getPct(d){
+  const vk=visKPIs();
+  const counted=vk.filter(k=>passKPI(d,k)!==null);
+  return counted.length>0?vk.filter(k=>passKPI(d,k)===true).length/counted.length*100:0;
+}
+function getStatus(d){const s=getPct(d);return s>=80?['Top','bg']:s>=50?['Average','ba']:['Needs Support','br']}
+function avg(k){const v=data.map(d=>d[k]).filter(x=>x!=null&&!isNaN(+x));return v.length?v.reduce((a,b)=>a+b,0)/v.length:0}
+function fmtNum(n){
+  if(n===undefined||n===null||isNaN(+n))return '—';
+  const v=+n;
+  return Number.isInteger(v)?String(v):v.toFixed(1).replace(/\.?0+$/,'');
+}
+function dispVal(v,kdef){
+  if(v===undefined||v===null||isNaN(+v))return '—';
+  if(kdef.key==='aht')return s2str(v);
+  if(kdef.unit==='%')return fmtNum(v)+'%';
+  return fmtNum(v);
+}
+
+// ─── TOAST ────────────────────────────────────────────────
+function toast(msg,type=''){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.className='toast show'+(type?' '+type:'');
+  setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+// ─── COUNTER ANIMATION ───────────────────────────────────
+function animateCounter(el,from,to,duration,suffix=''){
+  const start=Date.now(),range=to-from;
+  const tick=()=>{
+    const elapsed=Date.now()-start;
+    const progress=Math.min(1,elapsed/duration);
+    const ease=1-Math.pow(1-progress,3);
+    const val=from+range*ease;
+    el.textContent=(Number.isInteger(to)?Math.round(val):val.toFixed(1))+suffix;
+    if(progress<1)requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════════
+const CI={};
+function dChart(id){if(CI[id]){CI[id].destroy();delete CI[id];}}
+const gc='rgba(0,0,0,0.05)';
+const CHART_ANIM={duration:900,easing:'easeOutQuart'};
+
+function renderCharts(){
+  const vk=visKPIs(), names=data.map(d=>d.name);
+  // Radar
+  dChart('radar');
+  const ts=tSec();
+  const radarTeam=vk.map(k=>{
+    if(k.key==='aht'){const a=Math.round(avg('aht'));return Math.min(100,ts>0?Math.round((1-a/ts)*50+50):50);}
+    return Math.min(100,+avg(k.key).toFixed(1));
+  });
+  const radarTgt=vk.map(k=>k.key==='aht'?75:+(targets[k.key]||80));
+  CI['radar']=new Chart(document.getElementById('c-radar'),{
+    type:'radar',
+    data:{labels:vk.map(k=>k.label),datasets:[
+      {label:'Team avg',data:radarTeam,backgroundColor:'rgba(2,128,144,.18)',borderColor:'#028090',pointBackgroundColor:'#028090',pointRadius:5,borderWidth:2.5},
+      {label:'Target',data:radarTgt,backgroundColor:'rgba(22,163,74,.07)',borderColor:'#16A34A',pointBackgroundColor:'#16A34A',pointRadius:4,borderWidth:1.5,borderDash:[5,4]}
+    ]},
+    options:{animation:CHART_ANIM,responsive:true,plugins:{legend:{labels:{font:{size:11},boxWidth:12}}},scales:{r:{ticks:{font:{size:8},backdropColor:'transparent'},grid:{color:gc},pointLabels:{font:{size:11}},min:0,max:100}}}
+  });
+
+  // Overall
+  dChart('overall');
+  CI['overall']=new Chart(document.getElementById('c-overall'),{
+    type:'bar',
+    data:{labels:names,datasets:[{
+      data:data.map(d=>+getPct(d).toFixed(0)),
+      backgroundColor:data.map(d=>getPct(d)>=80?'rgba(22,163,74,.85)':getPct(d)>=50?'rgba(217,119,6,.85)':'rgba(220,38,38,.85)'),
+      borderRadius:6,borderSkipped:false
+    }]},
+    options:{animation:CHART_ANIM,responsive:true,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw}% targets met`}}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{min:0,max:100,ticks:{callback:v=>v+'%'},grid:{color:gc}}}}
+  });
+
+  // Per-KPI
+  vk.forEach(k=>dChart(k.key));
+  const grid=document.getElementById('kpi-charts');
+  grid.innerHTML='';
+  vk.forEach(kdef=>{
+    const div=document.createElement('div');div.className='chart-card';
+    div.innerHTML=`<h3>${kdef.label} (${kdef.unit||'score'})</h3><canvas id="c-${kdef.key}" height="180"></canvas>`;
+    grid.appendChild(div);
+  });
+  vk.forEach(kdef=>{
+    const el=document.getElementById('c-'+kdef.key);if(!el)return;
+    if(kdef.key==='aht'){
+      const ts2=tSec(),tM=+(ts2/60).toFixed(3);
+      CI['aht']=new Chart(el,{type:'bar',data:{labels:names,datasets:[
+        {label:'AHT',data:data.map(d=>+((d.aht||0)/60).toFixed(3)),backgroundColor:data.map(d=>(d.aht||0)<=ts2?'rgba(2,128,144,.85)':'rgba(220,38,38,.85)'),borderRadius:5},
+        {type:'line',label:'Target',data:Array(names.length).fill(tM),borderColor:'#DC2626',borderDash:[6,4],borderWidth:2,pointRadius:0}
+      ]},options:{animation:CHART_ANIM,responsive:true,plugins:{legend:{labels:{font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:c=>c.datasetIndex===0?s2str(data[c.dataIndex].aht||0):'Target: '+targets.aht}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{ticks:{callback:v=>{const m=Math.floor(v),s=Math.round((v-m)*60);return m+':'+(s<10?'0':'')+s}},grid:{color:gc}}}}});
+    } else {
+      const t=+targets[kdef.key]||0;
+      const vals=data.map(d=>d[kdef.key]==null?null:+(d[kdef.key]));
+      const maxY=kdef.unit==='%'?105:Math.max(...vals.filter(v=>v!=null))*1.15||100;
+      CI[kdef.key]=new Chart(el,{type:'bar',data:{labels:names,datasets:[
+        {label:kdef.label,data:vals,backgroundColor:data.map(d=>passKPI(d,kdef)===null?'rgba(148,163,184,.6)':passKPI(d,kdef)?'rgba(2,128,144,.85)':'rgba(220,38,38,.85)'),borderRadius:5},
+        {type:'line',label:'Target',data:Array(names.length).fill(t),borderColor:'#DC2626',borderDash:[6,4],borderWidth:2,pointRadius:0}
+      ]},options:{animation:CHART_ANIM,responsive:true,plugins:{legend:{labels:{font:{size:10},boxWidth:10}},tooltip:{callbacks:{label:c=>c.datasetIndex===0?(c.raw===null?'N/A':c.raw+(kdef.unit||'')):'Target: '+t+(kdef.unit||'')}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{min:0,max:maxY,ticks:{callback:v=>v+(kdef.unit||'')},grid:{color:gc}}}}});
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// OVERVIEW
+// ═══════════════════════════════════════════════════════════
+function renderSumCards(){
+  const vk=visKPIs();
+  const wrap=document.getElementById('sum-cards');
+  wrap.innerHTML=vk.map((kdef,i)=>{
+    let val,sub,pass,numericVal;
+    if(kdef.key==='aht'){
+      // Use teamOverall AHT (seconds) directly — exact Excel value
+      numericVal=teamVal('aht');
+      val=s2str(Math.round(numericVal));
+      sub='target ≤ '+targets.aht;
+      pass=Math.round(numericVal)<=tSec();
+    } else {
+      // teamOverall % values are already in % (e.g. 58 not 0.58)
+      numericVal=teamVal(kdef.key);
+      val=fmtNum(numericVal)+(kdef.unit||'');
+      sub='target ≥ '+targets[kdef.key]+(kdef.unit||'');
+      pass=kdef.dir==='min'?numericVal>=(+targets[kdef.key]):numericVal<=(+targets[kdef.key]);
+    }
+    return `<div class="kpi-card ${pass?'pass':'fail'}" style="animation-delay:${i*.06}s">
+      <div class="klbl">${kdef.label}</div>
+      <div class="kval" id="kv-${kdef.key}">${val}</div>
+      <div class="ktgt"><span class="kicon">${pass?'✓':'✗'}</span>${sub}</div>
+    </div>`;
+  }).join('');
+  // Counter animation for % KPIs
+  vk.forEach(kdef=>{
+    if(kdef.key!=='aht'&&kdef.unit==='%'){
+      const el=document.getElementById('kv-'+kdef.key);
+      if(el){const a=teamVal(kdef.key);animateCounter(el,0,a,900,'%');}
+    }
+  });
+}
+
+function renderOvTable(){
+  const vk=visKPIs();
+  document.getElementById('ov-head').innerHTML=`<tr><th>#</th><th>Agent</th>${vk.map(k=>`<th>${k.label}</th>`).join('')}<th>Score</th><th>Status</th></tr>`;
+  document.getElementById('ov-body').innerHTML=data.map((d,i)=>{
+    const [stL,stC]=getStatus(d);
+    const cells=vk.map(kdef=>{
+      const p=passKPI(d,kdef);
+      let pct=0;
+      if(kdef.key==='aht')pct=Math.min(100,(d.aht||0)/Math.max(1,tSec())*100);
+      else pct=Math.min(100,+(d[kdef.key]||0));
+      const col=p===null?'#94A3B8':p?'#028090':'#DC2626';
+      return `<td>
+        <div style="font-weight:700;font-size:11px">${dispVal(d[kdef.key],kdef)}</div>
+        <div class="pb"><div class="pf" style="--pw:${pct.toFixed(1)}%;background:${col}"></div></div>
+      </td>`;
+    }).join('');
+    const note=meetingNotes[d.name]?'📝 ':'';
+    const outlier=isOutlier(d);
+    const badKPIs=outlierKPIs(d);
+    const nameHtml=outlier
+      ?`<span class="outlier-name">${note}${d.name}</span><span class="outlier-pill" title="Outlier on: ${badKPIs.join(', ')}">⚠️ OUTLIER</span>`
+      :`${note}${d.name}`;
+    return `<tr class="tr-anim${outlier?' outlier-row':''}" style="animation-delay:${i*.04}s">
+      <td style="color:var(--dgray);font-weight:700;font-size:11px">${i+1}</td>
+      <td><div class="acell">
+        <div class="av" style="background:${AVC[i%AVC.length]};color:${AVT[i%AVT.length]}">${ini(d.name)}</div>
+        ${nameHtml}
+      </div></td>
+      ${cells}
+      <td><strong>${getPct(d).toFixed(0)}%</strong></td>
+      <td><span class="badge ${stC}">${stL}</span></td>
+    </tr>`;
+  }).join('');
+  // Animate progress bars after render
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.pf').forEach(el=>el.classList.add('animated'));
+  });
+}
+
+function renderOverview(){renderSumCards();renderCharts();renderOvTable();}
+
+// ═══════════════════════════════════════════════════════════
+// AGENTS
+// ═══════════════════════════════════════════════════════════
+function renderAgents(){
+  const vk=visKPIs();
+  document.getElementById('ag-head').innerHTML=`<tr><th>#</th><th>Agent</th>${vk.map(k=>`<th>${k.label} (${k.unit||'score'})</th>`).join('')}<th>Score</th><th>Actions</th></tr>`;
+  document.getElementById('ag-body').innerHTML=data.map((d,i)=>{
+    const outlier=isOutlier(d);
+    const badKPIs=outlierKPIs(d);
+    const nameCell=outlier
+      ?`<span class="outlier-name">${d.name}</span><span class="outlier-pill" title="${badKPIs.join(', ')}">⚠️ OUTLIER</span>`
+      :`<span id="nt-${i}">${d.name}</span>`;
+    return `<tr class="tr-anim${outlier?' outlier-row':''}" style="animation-delay:${i*.04}s">
+    <td style="color:var(--dgray);font-weight:700;font-size:11px">${i+1}</td>
+    <td><div class="acell" id="nc-${i}">
+      <div class="av" style="background:${AVC[i%AVC.length]};color:${AVT[i%AVT.length]}">${ini(d.name)}</div>
+      ${outlier?nameCell:`<span id="nt-${i}">${d.name}</span>`}
+    </div></td>
+    ${vk.map(kdef=>{
+      const p=passKPI(d,kdef);
+      const isKpiOutlier=badKPIs.includes(kdef.label);
+      const cellStyle=isKpiOutlier?'background:rgba(254,226,226,.5);':'';
+      return kdef.key==='aht'
+        ?`<td style="${cellStyle}"><input class="si" type="text" value="${s2str(d.aht||0)}" onchange="upd(${i},'aht',this.value,'time')"></td>`
+        :`<td style="${cellStyle}"><input class="si" type="number" value="${d[kdef.key]===null?'':fmtNum(d[kdef.key])}" onchange="upd(${i},'${kdef.key}',this.value)"></td>`;
+    }).join('')}
+    <td><strong>${getPct(d).toFixed(0)}%</strong></td>
+    <td style="white-space:nowrap">
+      <button class="eb" onclick="editName(${i})">✏️</button>
+      <button class="eb" style="margin-left:3px;color:#1D4ED8;border-color:#BFDBFE" onclick="openNotes('${d.name.replace(/'/g,"\\'")}')">📝</button>
+      <button class="eb" style="margin-left:3px;color:#DC2626;border-color:#FECACA" onclick="delAgent(${i})">🗑</button>
+    </td>
+  </tr>`;}).join('');
+}
+
+function upd(i,f,v,t){
+  data[i][f]=t==='time'?str2s(v):(v===''?null:+v||0);
+  teamOverall=null; // data changed manually, recalculate
+  saveToLocal();
+}
+function editName(i){
+  const el=document.getElementById('nt-'+i);
+  el.outerHTML=`<input class="ni" id="ni-${i}" value="${data[i].name}" onblur="saveName(${i})" onkeydown="if(event.key==='Enter')saveName(${i})">`;
+  setTimeout(()=>{const inp=document.getElementById('ni-'+i);if(inp)inp.focus();},10);
+}
+function saveName(i){
+  const inp=document.getElementById('ni-'+i);if(!inp)return;
+  const v=inp.value.trim()||data[i].name;data[i].name=v;
+  inp.outerHTML=`<span id="nt-${i}">${v}</span>`;
+  const a=document.querySelector(`#nc-${i} .av`);if(a)a.textContent=ini(v);
+  saveToLocal();
+}
+function saveAll(){
+  document.querySelectorAll('.ni').forEach(inp=>{const i=parseInt(inp.id.replace('ni-',''));if(!isNaN(i))saveName(i)});
+  teamOverall=null; // recalculate from data
+  renderOverview();toast('✅ Changes saved!','success');
+  saveToLocal();
+}
+function delAgent(i){
+  if(!confirm(`Remove ${data[i].name}?`))return;
+  data.splice(i,1);teamOverall=null;renderAgents();renderOverview();toast('🗑 Agent removed');
+  saveToLocal();
+}
+function exportCSV(){
+  const vk=visKPIs();
+  let c='#,Name,'+vk.map(k=>k.label).join(',')+',Score\n';
+  data.forEach((d,i)=>{c+=(i+1)+','+d.name+','+vk.map(k=>k.key==='aht'?s2str(d.aht||0):(d[k.key]===null?'N/A':fmtNum(d[k.key]||0))).join(',')+','+getPct(d).toFixed(0)+'%\n'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([c],{type:'text/csv'}));
+  a.download='team_performance.csv';a.click();toast('📥 CSV exported','success');
+}
+function openAddAgent(){
+  document.getElementById('na-name').value='';
+  document.getElementById('na-kpis').innerHTML=visKPIs().map(k=>`<div class="fr">
+    <label>${k.label} (${k.unit||'score'})</label>
+    <input type="text" id="na-${k.key}" placeholder="${k.key==='aht'?'mm:ss e.g. 9:30':'0-100'}">
+  </div>`).join('');
+  document.getElementById('modal-agent').classList.add('open');
+}
+function confirmAddAgent(){
+  const name=document.getElementById('na-name').value.trim();
+  if(!name){toast('⚠️ Enter a name','error');return}
+  const ag={name};
+  visKPIs().forEach(k=>{
+    const inp=document.getElementById('na-'+k.key);
+    if(inp){const v=inp.value.trim();ag[k.key]=k.key==='aht'?str2s(v):(v===''?null:+v||0);}
+  });
+  data.push(ag);closeMo('modal-agent');renderAgents();renderOverview();toast('✅ Agent added','success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TARGETS
+// ═══════════════════════════════════════════════════════════
+function renderTargets(){
+  document.getElementById('tgt-grid').innerHTML=visKPIs().map((kdef,i)=>`
+    <div class="tc" style="animation-delay:${i*.06}s">
+      <label>${kdef.label}</label>
+      <div class="tc-r">
+        <input type="text" id="tgt-${kdef.key}" value="${targets[kdef.key]||kdef.defTgt}">
+        <span class="unit">${kdef.unit||''}</span>
+      </div>
+      <div class="dir">${kdef.dir==='max'?'⬇️ Lower is better':'⬆️ Higher is better'}</div>
+    </div>`).join('');
+}
+function saveTgts(){
+  visKPIs().forEach(k=>{const inp=document.getElementById('tgt-'+k.key);if(inp)targets[k.key]=inp.value.trim()});
+  renderOverview();toast('✅ Targets saved!','success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// PERIOD
+// ═══════════════════════════════════════════════════════════
+function upPeriod(){
+  const f=document.getElementById('df').value,t=document.getElementById('dt').value;
+  const fmt=d=>new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  if(f&&t)document.getElementById('pp').textContent=fmt(f)+' — '+fmt(t);
+  else if(f)document.getElementById('pp').textContent='From '+fmt(f);
+}
+(()=>{
+  const now=new Date(),mon=new Date(now);
+  mon.setDate(now.getDate()-now.getDay()+1);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);
+  const fmt=d=>d.toISOString().split('T')[0];
+  document.getElementById('df').value=fmt(mon);
+  document.getElementById('dt').value=fmt(sun);
+  upPeriod();
+})();
+
+// ═══════════════════════════════════════════════════════════
+// EXCEL IMPORT — handles exact Book11.xlsx format:
+//   • Time columns (AHT, Chat Accept Time): Excel stores as day-fraction 0-1
+//     e.g.  00:08:48  → raw = 0.00611111...  → ×86400 = 528 secs
+//   • % columns (RR, CSAT, Knowledge, Retention, EOD):
+//     stored as decimal  0.42 → 42% ,  0.909 → 90.9% ,  1 → 100%
+//     OR already %       85.7 → 85.7% ,  100 → 100%
+//   • 'N/A' string → null
+//   • Clients Mark: plain integer, no conversion
+// ═══════════════════════════════════════════════════════════
+
+// ── AHT PARSER ──────────────────────────────────────────────
+// raw: XLSX numeric (time fraction 0-1) | display: "0:08:48" string
+function parseAHT(rawVal, dispVal){
+  // 1. Display string has HH:MM:SS or MM:SS
+  const d=String(dispVal||'').trim();
+  let m=d.match(/(\d+):(\d{2}):(\d{2})/);
+  if(m)return +m[1]*3600 + +m[2]*60 + +m[3];
+  m=d.match(/^(\d+):(\d{2})$/);
+  if(m)return +m[1]*60 + +m[2];
+  // 2. Raw string has time
+  const r=String(rawVal||'').trim();
+  m=r.match(/(\d+):(\d{2}):(\d{2})/);
+  if(m)return +m[1]*3600 + +m[2]*60 + +m[3];
+  m=r.match(/^(\d+):(\d{2})$/);
+  if(m)return +m[1]*60 + +m[2];
+  // 3. Numeric raw
+  const n=typeof rawVal==='number'?rawVal:parseFloat(r.replace(',','.'));
+  if(isNaN(n)||n===0)return 0;
+  // Excel time fraction: 00:08:48 = 528/86400 = 0.006111...  (always < 0.5 for <12h calls)
+  if(n>0 && n<0.5)return Math.round(n*86400);
+  if(n>60)return Math.round(n);   // already seconds
+  return Math.round(n*60);         // minutes
+}
+
+// ── % KPI PARSER ────────────────────────────────────────────
+// Handles: 0.909→90.9%  |  1→100%  |  85.7→85.7%  |  100→100%  |  'N/A'→null
+function parseKPI(rawVal, dispVal, kdef){
+  // N/A check
+  const rStr=String(rawVal||'').trim().toLowerCase();
+  if(rStr===''||rStr==='n/a'||rStr==='na'||rStr==='-'||rStr==='null')return null;
+  // Display has %
+  const d=String(dispVal||'').trim();
+  if(d.endsWith('%')){
+    const v=parseFloat(d);
+    if(!isNaN(v))return Math.round(v*10)/10;
+  }
+  // Raw numeric
+  const n=typeof rawVal==='number'?rawVal:parseFloat(rStr.replace(',','.'));
+  if(isNaN(n))return null;
+  if(kdef.unit==='%'){
+    if(n===0)return 0;
+    if(n>0 && n<=1)return Math.round(n*1000)/10;  // 0.909→90.9, 1→100
+    if(n>1 && n<=100)return Math.round(n*10)/10;   // 85.7→85.7, 100→100
+    return 100; // cap
+  }
+  return n; // non-% metric (e.g. Clients Mark — keep raw integer)
+}
+
+// ── AUTO-DETECT HEADER ROW ───────────────────────────────────
+function findHeaderRow(rows){
+  for(let i=0;i<Math.min(rows.length,25);i++){
+    const row=rows[i];
+    const nonEmpty=row.filter(c=>c!==''&&c!=null&&c!==undefined);
+    const textCells=nonEmpty.filter(c=>isNaN(+c)&&String(c).trim().length>1);
+    if(nonEmpty.length>=3&&textCells.length>=2)return i;
+  }
+  return 0;
+}
+
+// ── COLUMN AUTO-DETECT ───────────────────────────────────────
+function detectMapping(){
+  const m={};
+  ['name',...kpiDefs.map(k=>k.key)].forEach(key=>{
+    const aliases=COL_MAP[key]||[key];
+    impHdrs.forEach((h,i)=>{
+      if(m[key]!==undefined)return;
+      const hl=h.toLowerCase().trim().replace(/\n/g,' ').replace(/\s+/g,' ');
+      if(aliases.some(a=>{
+        const al=a.toLowerCase().replace(/\n/g,' ').replace(/\s+/g,' ');
+        return hl===al||hl.startsWith(al)||al.startsWith(hl)||hl.includes(al);
+      }))m[key]=i;
+    });
+  });
+  return m;
+}
+
+function handleFile(event){
+  const file=event.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:false,cellNF:true,cellText:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rRaw =XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+      const rDisp=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+      if(rRaw.length<2){toast('⚠️ File is empty','error');return}
+      const hIdx=findHeaderRow(rDisp);
+      impHdrs=rDisp[hIdx].map(h=>String(h==null?'':h).trim());
+      impRaw =rRaw.slice(hIdx+1).filter(r=>r&&r.some(c=>c!==null&&c!==''&&c!==undefined));
+      impDisp=rDisp.slice(hIdx+1).filter(r=>r&&r.some(c=>c!==''));
+      showMappingUI();
+    }catch(err){toast('⚠️ Error: '+err.message,'error');console.error(err)}
+  };
+  reader.readAsArrayBuffer(file);event.target.value='';
+}
+
+function showMappingUI(){
+  const m=detectMapping();
+  const allKeys=['name',...kpiDefs.map(k=>k.key)];
+  const labels={name:'Agent Name',...Object.fromEntries(kpiDefs.map(k=>[k.key,k.label]))};
+  const opts='<option value="">-- Skip --</option>'+impHdrs.map((h,i)=>`<option value="${i}">${h||'Col '+(i+1)}</option>`).join('');
+  document.getElementById('import-panel').style.display='block';
+  document.getElementById('mapping-ui').innerHTML=`
+    <div style="background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.07);margin-bottom:14px">
+      <p style="font-size:12px;color:var(--dgray);margin-bottom:13px">✅ Auto-detected mapping from your file — adjust if needed, then preview</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:10px;margin-bottom:14px">
+        ${allKeys.map(k=>`<div>
+          <label style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--dgray);font-weight:700;display:block;margin-bottom:4px">${labels[k]}</label>
+          <select id="map-${k}" style="width:100%;padding:5px 7px;font-size:12px;border:1px solid var(--mgray);border-radius:7px;font-family:inherit">${opts}</select>
+        </div>`).join('')}
+      </div>
+      <button class="btn btn-p" onclick="previewImport()">👁 Preview import →</button>
+      <button class="btn" style="margin-left:8px" onclick="cancelImp()">Cancel</button>
+    </div>
+    <div style="background:#F8FAFC;border-radius:10px;padding:12px;overflow-x:auto;margin-bottom:12px">
+      <p style="font-size:11px;font-weight:700;color:var(--dgray);margin-bottom:7px">📋 File preview — first 7 data rows (display values):</p>
+      <table style="border-collapse:collapse;font-size:11px">
+        <thead><tr>${impHdrs.map(h=>`<th style="padding:5px 9px;background:var(--navy);color:#fff;white-space:nowrap;text-align:left">${h}</th>`).join('')}</tr></thead>
+        <tbody>${(impDisp||[]).slice(0,7).map((r,ri)=>`<tr style="background:${ri%2?'#F8FAFC':'#fff'}">${impHdrs.map((_,i)=>`<td style="padding:4px 9px;border-bottom:1px solid #F1F5F9;white-space:nowrap">${r[i]==null?'':r[i]}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+    </div>
+    <div id="verify-wrap"></div>`;
+  allKeys.forEach(k=>{const s=document.getElementById('map-'+k);if(s&&m[k]!==undefined)s.value=m[k];});
+}
+
+function previewImport(){
+  const allKeys=['name',...kpiDefs.map(k=>k.key)];
+  const m={};
+  allKeys.forEach(k=>{const s=document.getElementById('map-'+k);if(s&&s.value!=='')m[k]=+s.value});
+  if(m.name===undefined){toast('⚠️ Map the Agent Name column','error');return}
+
+  const newData=[],verRows=[];
+  impRaw.forEach((row,ri)=>{
+    const dr=(impDisp||[])[ri]||[];
+    const rawName=row[m.name];const dispName=String(dr[m.name]||rawName||'').trim();
+    if(!dispName||/^overall$/i.test(dispName)||/^итого$/i.test(dispName))return;
+
+    const ag={name:dispName},vr={name:dispName};
+    kpiDefs.forEach(kdef=>{
+      if(m[kdef.key]!==undefined){
+        const rv=row[m[kdef.key]];
+        const dv=dr[m[kdef.key]];
+        const fd=String(dv!=null&&dv!==''?dv:(rv!=null?rv:'')).trim();
+        if(kdef.key==='aht'){
+          ag[kdef.key]=parseAHT(rv,dv);
+          vr[kdef.key]={file:fd,dash:s2str(ag[kdef.key])};
+        } else {
+          const parsed=parseKPI(rv,dv,kdef);
+          ag[kdef.key]=parsed;
+          vr[kdef.key]={file:fd,dash:parsed===null?'N/A':fmtNum(parsed)+(kdef.unit||'')};
+        }
+      } else {ag[kdef.key]=null;vr[kdef.key]={file:'—',dash:'—'};}
+    });
+    newData.push(ag);verRows.push(vr);
+  });
+
+  if(!newData.length){toast('⚠️ No valid rows found','error');return}
+  window._pendingData=newData;
+
+  // ── Read Overall row: detect row where name = 'Overall' / 'итого' ──
+  window._pendingOverall=null;
+  impRaw.forEach((row,ri)=>{
+    const dr=(impDisp||[])[ri]||[];
+    const rawName=row[m.name];const dispName=String(dr[m.name]||rawName||'').trim();
+    if(!/^overall$/i.test(dispName)&&!/^итого$/i.test(dispName))return;
+    const ov={};
+    kpiDefs.forEach(kdef=>{
+      if(m[kdef.key]!==undefined){
+        const rv=row[m[kdef.key]],dv=dr[m[kdef.key]];
+        if(kdef.key==='aht'){ov[kdef.key]=parseAHT(rv,dv);}
+        else{
+          const parsed=parseKPI(rv,dv,kdef);
+          ov[kdef.key]=parsed;
+        }
+      }
+    });
+    window._pendingOverall=ov;
+    console.log('Overall row detected:', JSON.stringify(ov));
+  });
+  const vk=visKPIs();
+  const ovMsg=window._pendingOverall
+    ?`<span style="color:#15803D;font-weight:700">✓ Overall row detected — team totals will match Excel exactly</span>`
+    :`<span style="color:#D97706">⚠️ No Overall row found — team averages will be calculated</span>`;
+  let html=`<div style="background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.07)">
+    <p style="font-size:13px;font-weight:800;color:var(--navy);margin-bottom:4px">✅ ${newData.length} agents found — order from file preserved</p>
+    <p style="font-size:11px;margin-bottom:6px">${ovMsg}</p>
+    <p style="font-size:11px;color:var(--dgray);margin-bottom:11px">
+      <span style="color:#15803D;font-weight:700">Green ✓</span> exact match &nbsp;|&nbsp;
+      <span style="color:#D97706;font-weight:700">Orange ~</span> converted &nbsp;|&nbsp;
+      <span style="color:#94A3B8;font-weight:700">Grey N/A</span> no data
+    </p>
+    <div style="overflow-x:auto;max-height:320px;overflow-y:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
+      <thead style="position:sticky;top:0"><tr>
+        <th style="padding:6px 10px;background:var(--navy);color:#fff;text-align:left">#</th>
+        <th style="padding:6px 10px;background:var(--navy);color:#fff;text-align:left">Agent</th>
+        ${vk.map(k=>`<th style="padding:6px 10px;background:var(--navy);color:#fff;text-align:center;white-space:nowrap">${k.label}<br><span style="font-weight:400;opacity:.7;font-size:9px">File → Dashboard</span></th>`).join('')}
+      </tr></thead><tbody>`;
+  verRows.forEach((r,ri)=>{
+    html+=`<tr style="background:${ri%2?'#F8FAFC':'#fff'}">
+      <td style="padding:6px 10px;color:#94A3B8;font-size:10px;font-weight:700">${ri+1}</td>
+      <td style="padding:6px 10px;font-weight:700;white-space:nowrap">${r.name}</td>`;
+    vk.forEach(kdef=>{
+      const v=r[kdef.key]||{file:'—',dash:'—'};
+      const isNA=v.dash==='N/A'||v.dash==='—';
+      const match=!isNA&&v.file===v.dash;
+      const col=isNA?'#94A3B8':match?'#15803D':'#D97706';
+      html+=`<td style="padding:5px 10px;text-align:center;white-space:nowrap">
+        <span style="color:#64748B;font-size:10px">${v.file}</span>
+        <span style="color:#CBD5E1;margin:0 3px">→</span>
+        <span style="color:${col};font-weight:800">${isNA?'N/A':match?'✓':'~'} ${v.dash}</span>
+      </td>`;
+    });
+    html+='</tr>';
+  });
+  html+=`</tbody></table></div>
+    <div style="display:flex;gap:10px;margin-top:15px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-p" onclick="applyImport()" style="font-size:13px;padding:9px 22px">✅ Apply import to dashboard</button>
+      <button class="btn btn-red" onclick="cancelImp()">✗ Cancel</button>
+    </div></div>`;
+  document.getElementById('verify-wrap').innerHTML=html;
+  setTimeout(()=>document.getElementById('verify-wrap').scrollIntoView({behavior:'smooth',block:'start'}),80);
+}
+
+function applyImport(){
+  if(!window._pendingData?.length){toast('⚠️ No data pending','error');return}
+  data=window._pendingData;
+
+  // Read Overall row from pending and set teamOverall
+  if(window._pendingOverall){
+    teamOverall=window._pendingOverall;
+    window._pendingOverall=null;
+  } else {
+    teamOverall=null; // will use fallback avg
+  }
+
+  window._pendingData=null;
+  cancelImp();renderOverview();
+  setTimeout(()=>switchTab('overview'),60);
+  toast('✅ '+data.length+' agents imported — totals read directly from Excel','success');
+}
+function cancelImp(){
+  document.getElementById('import-panel').style.display='none';
+  impRaw=null;impDisp=null;impHdrs=[];window._pendingData=null;
+}
+
+// Drop zone
+const dz=document.getElementById('drop-zone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.style.borderColor='var(--teal)';dz.style.background='#F0FDFB';dz.style.transform='scale(1.02)'});
+dz.addEventListener('dragleave',()=>{dz.style.borderColor='';dz.style.background='';dz.style.transform=''});
+dz.addEventListener('drop',e=>{
+  e.preventDefault();dz.style.borderColor='';dz.style.background='';dz.style.transform='';
+  const f=e.dataTransfer.files[0];
+  if(f){const dt=new DataTransfer();dt.items.add(f);document.getElementById('fi').files=dt.files;handleFile({target:{files:[f],value:''}});}
+});
+
+// ═══════════════════════════════════════════════════════════
+// 5-WEEK COMPARISON
+// ═══════════════════════════════════════════════════════════
+function openWeekModal(){
+  document.getElementById('wk-label').value=`W${weekHistory.length+1} — ${document.getElementById('pp').textContent}`;
+  document.getElementById('modal-week').classList.add('open');
+}
+function saveWeek(){
+  const label=document.getElementById('wk-label').value.trim()||`Week ${weekHistory.length+1}`;
+  weekHistory.push({label,data:JSON.parse(JSON.stringify(data))});
+  if(weekHistory.length>5)weekHistory.shift();
+  closeMo('modal-week');renderWeekTabs();renderCompare();toast('📅 Week saved','success');
+  saveToLocal();
+}
+function clearWeeks(){if(confirm('Clear week history?')){weekHistory=[];renderWeekTabs();renderCompare();toast('🗑 History cleared');saveToLocal();}}
+function renderWeekTabs(){
+  document.getElementById('week-tabs').innerHTML=weekHistory.map(w=>`<span class="week-btn">${w.label}</span>`).join('');
+}
+function renderCompare(){
+  const cc=document.getElementById('compare-out');
+  if(weekHistory.length<2){cc.innerHTML='<p style="font-size:13px;color:var(--dgray);text-align:center;padding:2.5rem">Save at least 2 weeks of data.</p>';return}
+  const vk=visKPIs().filter(k=>k.key!=='aht');
+  const wNames=weekHistory.map(w=>w.label);
+  const agentNames=[...new Set(weekHistory.flatMap(w=>w.data.map(d=>d.name)))];
+  let html='<div class="sdiv"><span></span>Team KPI Trends — Weekly</div><div class="charts-grid">';
+  vk.forEach(kdef=>html+=`<div class="chart-card"><h3>${kdef.label} Trend</h3><canvas id="cc-${kdef.key}" height="180"></canvas></div>`);
+  html+='</div><div class="sdiv"><span></span>Agent Scores Across Weeks</div><div class="tbl-wrap"><table><thead><tr><th>Agent</th>'+wNames.map(n=>`<th>${n}</th>`).join('')+'<th>Trend</th></tr></thead><tbody>';
+  agentNames.forEach(name=>{
+    const scores=weekHistory.map(w=>{const d=w.data.find(a=>a.name===name);return d?+getPct(d).toFixed(0):null});
+    const valid=scores.filter(s=>s!==null);
+    const trend=valid.length>=2?valid[valid.length-1]-valid[valid.length-2]:0;
+    const tc=trend>2?'#16A34A':trend<-2?'#DC2626':'#64748B';
+    html+=`<tr><td style="font-weight:700">${name}</td>${scores.map(s=>s===null?'<td>—</td>':`<td><strong>${s}%</strong></td>`).join('')}<td><span style="color:${tc};font-weight:800">${trend>0?'▲':'▼'} ${Math.abs(trend)}%</span></td></tr>`;
+  });
+  html+='</tbody></table></div>';
+  cc.innerHTML=html;
+  setTimeout(()=>{
+    vk.forEach(kdef=>{
+      const el=document.getElementById('cc-'+kdef.key);if(!el)return;
+      dChart('cc-'+kdef.key);
+      const vals=weekHistory.map(w=>{const vs=w.data.map(d=>d[kdef.key]).filter(v=>v!=null&&!isNaN(+v));return vs.length?+(vs.reduce((a,b)=>a+b,0)/vs.length).toFixed(1):0});
+      CI['cc-'+kdef.key]=new Chart(el,{type:'line',data:{labels:wNames,datasets:[
+        {label:'Team avg',data:vals,borderColor:'#028090',backgroundColor:'rgba(2,128,144,.1)',pointBackgroundColor:'#028090',pointRadius:5,fill:true,tension:0.35},
+        {label:'Target',data:Array(wNames.length).fill(+targets[kdef.key]),borderColor:'#DC2626',borderDash:[6,4],pointRadius:0,borderWidth:1.5}
+      ]},options:{animation:CHART_ANIM,responsive:true,plugins:{legend:{labels:{font:{size:10},boxWidth:10}}},scales:{x:{grid:{display:false}},y:{min:0,max:105,ticks:{callback:v=>v+(kdef.unit||'')},grid:{color:gc}}}}});
+    });
+  },100);
+}
+
+// ═══════════════════════════════════════════════════════════
+// INSIGHTS
+// ═══════════════════════════════════════════════════════════
+function renderInsights(){
+  const vk=visKPIs();const cards=[];
+  const sorted=[...data].sort((a,b)=>getPct(b)-getPct(a));
+  cards.push({t:'success',icon:'⭐',title:'Top Performer: '+sorted[0].name,text:`Meets ${metPass(sorted[0])} of ${totalVis()} targets (${getPct(sorted[0]).toFixed(0)}%). Consistent performance across all KPIs.`});
+  const worst=sorted[sorted.length-1];
+  cards.push({t:'danger',icon:'⚠️',title:'Needs Coaching: '+worst.name,text:`Only meets ${metPass(worst)} of ${totalVis()} targets (${getPct(worst).toFixed(0)}%). Recommend immediate 1-on-1 with structured coaching plan.`});
+  vk.forEach(kdef=>{
+    const below=data.filter(d=>passKPI(d,kdef)===false);
+    if(below.length>=Math.ceil(data.length*0.5))
+      cards.push({t:'warn',icon:'📉',title:kdef.label+' — Team-wide Gap',text:`${below.length}/${data.length} agents below target (${targets[kdef.key]}${kdef.unit||''}). Signals a training or process issue — team-level intervention needed.`});
+  });
+  const ts=tSec(),ahtAvg=avg('aht');
+  const highAHT=data.filter(d=>(d.aht||0)>ahtAvg*1.2);
+  if(highAHT.length)cards.push({t:'warn',icon:'⏱',title:'High AHT Outliers',text:`${highAHT.map(d=>d.name).join(', ')} are 20%+ above team average (${s2str(Math.round(ahtAvg))}). Call recording review recommended.`});
+  const stars=data.filter(d=>getPct(d)>=85);
+  if(stars.length)cards.push({t:'success',icon:'🏆',title:`${stars.length} Agent(s) at 85%+`,text:`${stars.map(d=>d.name).join(', ')} are top performers. Consider peer-coaching programs or recognition.`});
+  const noDataAgents=data.filter(d=>vk.some(k=>d[k.key]===null));
+  if(noDataAgents.length)cards.push({t:'info',icon:'ℹ️',title:'Missing KPI Data',text:`${noDataAgents.map(d=>d.name).join(', ')} have incomplete evaluations. Ensure all KPI assessments are completed for accurate scoring.`});
+  if(weekHistory.length>=2){
+    const cur=weekHistory[weekHistory.length-1],prev=weekHistory[weekHistory.length-2];
+    const kk=vk.filter(k=>k.key!=='aht');
+    const curA=kk.map(k=>cur.data.reduce((s,d)=>s+(+d[k.key]||0),0)/cur.data.length);
+    const preA=kk.map(k=>prev.data.reduce((s,d)=>s+(+d[k.key]||0),0)/prev.data.length);
+    const chg=(curA.reduce((a,b)=>a+b,0)-preA.reduce((a,b)=>a+b,0))/curA.length;
+    cards.push({t:chg>=0?'success':'warn',icon:'📊',title:'Week-over-Week: '+(chg>=0?'Improving ▲':'Declining ▼'),text:`Team KPI avg ${chg>=0?'increased':'decreased'} by ${Math.abs(chg).toFixed(1)} pts (${prev.label} → ${cur.label}).`});
+  }
+  document.getElementById('insights-out').innerHTML=`<div class="ig">${cards.map((c,i)=>`<div class="ic ${c.t}" style="animation-delay:${i*.07}s"><h4>${c.icon} ${c.title}</h4><p>${c.text}</p></div>`).join('')}</div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MEETING NOTES + AI
+// ═══════════════════════════════════════════════════════════
+function openNotes(agentName){
+  currentNotesAgent=agentName;
+  document.getElementById('mn-title').textContent='📝 Meeting Notes — '+agentName;
+  document.getElementById('mn-text').value=meetingNotes[agentName]?.notes||'';
+  document.getElementById('mn-ai-out').innerHTML=meetingNotes[agentName]?.analysis
+    ?`<div class="ai-plan"><h5>🤖 AI Analysis</h5><div class="ai-plan-body">${meetingNotes[agentName].analysis.replace(/</g,'&lt;')}</div></div>`:'';
+  document.getElementById('modal-notes').classList.add('open');
+}
+function saveNotesOnly(){
+  if(!currentNotesAgent)return;
+  const txt=document.getElementById('mn-text').value.trim();
+  if(!meetingNotes[currentNotesAgent])meetingNotes[currentNotesAgent]={};
+  meetingNotes[currentNotesAgent].notes=txt;
+  closeMo('modal-notes');renderAgents();toast('📝 Notes saved','success');
+  saveToLocal();
+}
+function clearNotes(){
+  if(!currentNotesAgent)return;
+  delete meetingNotes[currentNotesAgent];
+  document.getElementById('mn-text').value='';
+  document.getElementById('mn-ai-out').innerHTML='';
+  toast('🗑 Notes cleared');
+  saveToLocal();
+}
+function saveNotesAndAnalyze(){
+  const txt=document.getElementById('mn-text').value.trim();
+  if(!txt){toast('⚠️ Enter notes first','error');return}
+  if(!currentNotesAgent)return;
+  if(!meetingNotes[currentNotesAgent])meetingNotes[currentNotesAgent]={};
+  meetingNotes[currentNotesAgent].notes=txt;
+  analyzeWithAI(currentNotesAgent,txt);
+}
+
+async function analyzeWithAI(agentName,notes){
+  const out=document.getElementById('mn-ai-out');
+  out.innerHTML=`<div class="ai-loading"><div class="spin"></div>Analyzing with AI…</div>`;
+  const d=data.find(a=>a.name===agentName);
+  const kpiSummary=visKPIs().map(k=>`${k.label}: ${dispVal(d?d[k.key]:null,k)} (target: ${k.key==='aht'?targets.aht:targets[k.key]}${k.unit||''}) — ${d&&passKPI(d,k)===true?'✓ Met':d&&passKPI(d,k)===false?'✗ Below':'No data'}`).join('\n');
+  const prompt=`You are a call center team manager and performance coach. Based on the meeting notes and KPI data below, provide a structured coaching plan.
+
+AGENT: ${agentName}
+SCORE: ${d?getPct(d).toFixed(0)+'%':'N/A'} | STATUS: ${d?getStatus(d)[0]:'Unknown'}
+
+KPI DATA:
+${kpiSummary}
+
+MEETING NOTES:
+${notes}
+
+Provide your analysis in this structure:
+
+📋 KEY OBSERVATIONS FROM MEETING
+[2-3 bullet points about behavior, attitude, engagement]
+
+🔍 ROOT CAUSES
+[2-3 bullet points: why are there performance gaps]
+
+💪 STRENGTHS TO LEVERAGE
+[1-2 points: what to build on]
+
+🎯 30-DAY ACTION PLAN
+Week 1-2:
+• [Specific action 1]
+• [Specific action 2]
+Week 3-4:
+• [Specific action 3 with measurable outcome]
+• [Specific action 4]
+
+🗣️ COMMUNICATION APPROACH
+[How to manage/motivate this specific person based on the notes]
+
+📊 SUCCESS METRICS FOR NEXT MEETING
+[2-3 specific measurable targets to verify progress]
+
+Be concise, practical, and base everything on the actual notes and KPI numbers.`;
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
+    const result=await resp.json();
+    const text=result.content?.map(c=>c.text||'').join('')||'No response.';
+    if(!meetingNotes[agentName])meetingNotes[agentName]={};
+    meetingNotes[agentName].analysis=text;
+    out.innerHTML=`<div class="ai-plan"><h5>🤖 AI Coaching Analysis</h5><div class="ai-plan-body">${text.replace(/</g,'&lt;')}</div></div>`;
+    toast('🤖 AI analysis complete','success');
+    saveToLocal();
+  }catch(err){
+    out.innerHTML=`<div style="padding:10px;background:#FEE2E2;border-radius:8px;font-size:12px;color:#B91C1C">Error: ${err.message}</div>`;
+    toast('⚠️ AI error','error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// OUTLIER DETECTION
+// Agent is an outlier if ≥2 KPIs are >1.5 std dev in the bad direction
+// ═══════════════════════════════════════════════════════════
+function stdDev(arr){
+  const a=arr.reduce((s,v)=>s+v,0)/arr.length;
+  return Math.sqrt(arr.reduce((s,v)=>s+(v-a)**2,0)/arr.length);
+}
+function outlierKPIs(d){
+  const bad=[];
+  visKPIs().forEach(kdef=>{
+    const v=d[kdef.key];
+    if(v==null||isNaN(+v))return;
+    const vals=data.map(r=>r[kdef.key]).filter(x=>x!=null&&!isNaN(+x));
+    if(vals.length<3)return;
+    const m=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const sd=stdDev(vals);
+    if(sd===0)return;
+    // "bad direction": for AHT higher is worse; for others lower is worse
+    const z=kdef.key==='aht'?(+v-m)/sd:(m-+v)/sd;
+    if(z>1.4)bad.push(kdef.label);
+  });
+  return bad;
+}
+function isOutlier(d){return outlierKPIs(d).length>=2}
+
+// ═══════════════════════════════════════════════════════════
+// KPI MANAGER — ALL KPIs deletable, fixed ones show warning
+// ═══════════════════════════════════════════════════════════
+function renderKPIList(){
+  document.getElementById('kpi-list').innerHTML=kpiDefs.map((k,i)=>`
+    <div class="kpp ${k.fixed?'fixed':''}" style="animation-delay:${i*.05}s" title="${k.fixed?'Core KPI — deletion requires confirmation':'Custom KPI'}">
+      <span style="font-size:10px;margin-right:2px">${k.fixed?'🔒':'✏️'}</span>
+      ${k.visible?'':' <span style="opacity:.5;font-size:10px">hidden</span>'}
+      <strong>${k.label}</strong>
+      <span style="color:#94A3B8;font-size:10px">(${k.unit||'score'})</span>
+      <button class="kpr" onclick="toggleKPI(${i})" title="${k.visible?'Hide this KPI':'Show this KPI'}">${k.visible?'👁':'＋'}</button>
+      <button class="kpr del-kpr" onclick="delKPI(${i})" title="Delete KPI permanently"
+        style="color:${k.fixed?'#F87171':'#94A3B8'};font-size:16px;font-weight:700">×</button>
+    </div>`).join('');
+}
+function toggleKPI(i){
+  kpiDefs[i].visible=!kpiDefs[i].visible;
+  renderKPIList();renderOverview();renderAgents();
+  toast(kpiDefs[i].visible?`👁 ${kpiDefs[i].label} shown`:`🙈 ${kpiDefs[i].label} hidden`);
+}
+function delKPI(i){
+  const k=kpiDefs[i];
+  const msg=k.fixed
+    ?`⚠️ "${k.label}" is a core KPI.\n\nDeleting it will permanently remove it from ALL agents and charts.\n\nType "DELETE" to confirm.`
+    :`Delete KPI "${k.label}"?\n\nThis will remove it from all agents and charts.`;
+  if(k.fixed){
+    const ans=prompt(msg);
+    if(ans!=='DELETE'){toast('❌ Deletion cancelled');return;}
+  } else {
+    if(!confirm(msg))return;
+  }
+  kpiDefs.splice(i,1);
+  data.forEach(d=>delete d[k.key]);
+  delete targets[k.key];
+  renderKPIList();renderOverview();renderAgents();
+  toast(`🗑 "${k.label}" deleted`,'success');
+}
+function addKPI(){
+  const name=document.getElementById('nk-name').value.trim();
+  const unit=document.getElementById('nk-unit').value.trim()||'';
+  const dir=document.getElementById('nk-dir').value;
+  const tgt=document.getElementById('nk-tgt').value.trim()||'0';
+  if(!name){toast('⚠️ Enter KPI name','error');return}
+  const key=name.toLowerCase().replace(/[^a-z0-9]/g,'_');
+  if(kpiDefs.find(k=>k.key===key)){toast('⚠️ Already exists','error');return}
+  kpiDefs.push({key,label:name,unit,dir,defTgt:tgt,visible:true,fixed:false});
+  targets[key]=tgt;data.forEach(d=>d[key]=null);
+  ['nk-name','nk-unit','nk-tgt'].forEach(id=>document.getElementById(id).value='');
+  renderKPIList();renderOverview();renderAgents();toast(`✅ "${name}" added`,'success');
+}
+
+// ═══════════════════════════════════════════════════════════
+// SMART REPORTS
+// ═══════════════════════════════════════════════════════════
+const STEPS={
+  aht:['Review last 5 calls: identify exact moments where time was lost (hold, searching, silence)','Practice the STAR structure: Situation (15s) → Target (30s) → Action → Resolution (30s)','Speed-drill: simulate 10 common queries, measure your lookup time, reduce by 30s/week','Shadow the top AHT performer for one shift — observe and document their techniques','Set a daily micro-target: reduce today\'s calls by 30 seconds vs yesterday'],
+  rr:['Practice "Feel-Felt-Found" daily: "I understand how you feel, others felt that, what they found..."','Role-play the top 5 objection scenarios every morning for 5 minutes','Analyze 3 lost cases/week — identify the exact moment the customer disengaged','Apply "One More Try" rule before escalating: always attempt one additional retention offer','Track your RR daily and share in team chat for accountability'],
+  cast:['Open every call with your name and a warm, genuine greeting — script it until natural','Use the customer\'s name 3× per call: opening, middle, closing','End every call: "Is there anything else I can do to make your experience great today?"','Review your 5 lowest-rated calls — identify patterns in tone or language','Practice empathy: "I completely understand, let me personally take care of this for you"'],
+  kop:['Complete the product knowledge refresher module (30 min/day for 5 days)','Build a personal cheat sheet for the top 20 most-asked questions','Take the weekly product quiz — target 95%+ before next evaluation','Review all product updates from last 2 weeks, flag unclear areas to supervisor','Partner with the highest-KOP colleague for a 30-min knowledge-share session'],
+  ret:['Use the retention checklist before every call — tick each step as you go','Practice closure sequence: summarize action → confirm next steps → professional sign-off','Listen back to 3 of your own calls, score yourself on the retention checklist','Identify the most common point where retention fails in your calls — design a fix','Track your retention score daily for 2 weeks, record what changes on good days'],
+  eod:['Memorize the standard end-of-dialog script — practice until it feels natural','Record yourself closing a call and play it back — does it sound complete and professional?','Post-call checklist: ✓ Summary given ✓ Next steps stated ✓ Professional close','Peer-review with a colleague — focus only on the last 60 seconds of 2 calls','Set goal: 100% EOD compliance for the next 5 consecutive shifts'],
+  cqs:['Complete the software query creation training module (focus on common query types)','Practice the 10 most common query types in the test environment until fluent','Time yourself: target completing each query type under 90 seconds','Review all rejected queries from last week — understand each rejection reason','Have a team leader shadow you during query creation in 2 live calls this week'],
+  cm:['Review your lowest-rated interactions — identify the top 3 recurring feedback themes','Ask supervisor to listen to 2 calls this week and provide real-time feedback','Focus on first-call resolution: reducing repeat contacts directly improves client marks','Set a weekly client mark target and share with your team lead for accountability','Request a peer-learning session with your top-CM-scoring colleague'],
+};
+
+function sbk(col,l){return `<div class="sl" style="background:${col}">${l}</div>`}
+function sBadge(p){return p?`<span style="background:#DCFCE7;color:#15803D;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800">✓ On target</span>`:`<span style="background:#FEE2E2;color:#B91C1C;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:800">✗ Below</span>`}
+function period(){return document.getElementById('pp').textContent}
+
+function genAllSmart(){
+  smartCache={};smartCache['_team']=genTeamSmart();
+  data.forEach((d,i)=>smartCache[i]=genAgentSmart(d,i));
+  document.getElementById('smart-agent-btns').innerHTML=data.map((d,i)=>{
+    const [,cls]=getStatus(d);const dot=cls==='bg'?'#16A34A':cls==='ba'?'#D97706':'#DC2626';
+    const note=meetingNotes[d.name]?'📝':'';
+    return `<button class="sab" id="sab-${i}" onclick="showSmartAgent(${i})" style="animation-delay:${i*.05}s">
+      <div class="av" style="background:${AVC[i%AVC.length]};color:${AVT[i%AVT.length]};width:26px;height:26px;font-size:9px">${ini(d.name)}</div>
+      ${note} ${d.name}
+      <span style="width:9px;height:9px;border-radius:50%;background:${dot};display:inline-block;margin-left:auto;flex-shrink:0;box-shadow:0 0 0 2px #fff"></span>
+    </button>`;
+  }).join('');
+  showSmartTeam();toast('📋 Reports generated','success');
+}
+function showSmartTeam(){
+  document.querySelectorAll('.sab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sab-team').classList.add('active');
+  document.getElementById('smart-out').innerHTML=smartCache['_team']||'<div class="sr" style="text-align:center;color:var(--dgray)">Generate first.</div>';
+}
+function showSmartAgent(i){
+  document.querySelectorAll('.sab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sab-'+i).classList.add('active');
+  document.getElementById('smart-out').innerHTML=smartCache[i]||'';
+}
+function printSmart(){
+  const c=document.getElementById('smart-out').innerHTML;if(!c)return;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>SMART Report</title><style>body{font-family:Segoe UI,sans-serif;padding:2rem;font-size:12px;line-height:1.7}.sb{display:flex;gap:12px;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid #E2E8F0}.sl{width:38px;height:38px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:#fff;flex-shrink:0}.sbody h4{font-size:12px;font-weight:800;margin-bottom:3px}.sbody p{color:#475569}.mn-card,.ai-plan{padding:10px;border-radius:6px;margin-top:8px}.mn-card{background:#FFFBEB;border:1px solid #FDE68A}.ai-plan{background:#EFF6FF;border:1px solid #BFDBFE}</style></head><body>${c}</body></html>`);
+  w.document.close();w.print();
+}
+
+function genTeamSmart(){
+  const vk=visKPIs(),n=data.length;
+  const sorted=[...data].sort((a,b)=>getPct(b)-getPct(a));
+  const top=sorted[0],low=sorted[sorted.length-1];
+  const below50=data.filter(d=>getPct(d)<50);
+  const ts=tSec();
+  const teamGaps=vk.filter(kdef=>kdef.key==='aht'?Math.round(avg('aht'))>ts:avg(kdef.key)<+(targets[kdef.key]||0));
+  return `<div class="sr">
+    <div class="shd">
+      <div class="av" style="background:#E0F2FE;color:#0369A1;width:52px;height:52px;font-size:15px;font-weight:900">ALL</div>
+      <div><h2>Team SMART Report</h2><p style="color:var(--dgray)">${period()} — ${n} agents | ${vk.length} KPIs tracked</p></div>
+    </div>
+    ${[
+      {c:'#0891B2',l:'S',t:'Specific',b:`Team of <strong>${n} agents</strong> evaluated across: ${vk.map(k=>k.label).join(', ')}<br>
+        ⭐ Top: <strong>${top.name}</strong> (${getPct(top).toFixed(0)}%) &nbsp;|&nbsp; ⚠️ Needs support: <strong>${low.name}</strong> (${getPct(low).toFixed(0)}%)
+        ${below50.length?`<br>🔴 Below 50%: <strong>${below50.map(d=>d.name).join(', ')}</strong>`:''}`},
+      {c:'#0D9488',l:'M',t:'Measurable — Team Averages',b:vk.map(kdef=>{
+        let val,pass;
+        if(kdef.key==='aht'){const a=Math.round(avg('aht'));val=s2str(a);pass=a<=ts;}
+        else{const a=avg(kdef.key);val=fmtNum(a)+(kdef.unit||'');pass=a>=(+targets[kdef.key]);}
+        const belowN=data.filter(d=>passKPI(d,kdef)===false).length;
+        return `• <strong>${kdef.label}:</strong> avg <strong>${val}</strong> vs target ${targets[kdef.key]}${kdef.unit||''} ${sBadge(pass)} | ${belowN} below target`;
+      }).join('<br>')},
+      {c:'#7C3AED',l:'A',t:'Priority Action Areas',b:teamGaps.length?teamGaps.map(kdef=>{
+        const ss=STEPS[kdef.key]||[];
+        return `<strong>${kdef.label}:</strong><br>${ss.slice(0,3).map(s=>`&nbsp;&nbsp;• ${s}`).join('<br>')}`;
+      }).join('<br><br>'):'All KPI averages are on target. Focus on eliminating bottom-performers and sustaining top results.'},
+      {c:'#DB2777',l:'R',t:'Relevant — Business Impact',b:'RR and CSAT directly drive revenue retention and NPS. EOD and Knowledge compliance reduces escalations. Improving these by 5% can reduce customer churn by 10-15% and lower cost-per-contact.'},
+      {c:'#D97706',l:'T',t:'Time-bound',b:`<strong>This week:</strong> 1-on-1 with agents below 50%${below50.length?' ('+below50.map(d=>d.name).join(', ')+')':', none'}.<br>
+        <strong>Weeks 2-3:</strong> Targeted KPI coaching; +5 pt target per gap.<br>
+        <strong>Monthly:</strong> All agents ≥ 60% score.<br>
+        <strong>Quarterly:</strong> 80% of team achieves "Top" status.`},
+    ].map((b,bi)=>`<div class="sb" style="animation-delay:${bi*.08}s">${sbk(b.c,b.l)}<div class="sbody"><h4>${b.t}</h4><p>${b.b}</p></div></div>`).join('')}
+  </div>`;
+}
+
+function genAgentSmart(d,i){
+  const vk=visKPIs(),ts2=tSec();
+  const sc=getPct(d).toFixed(0);const pass=metPass(d),total=totalVis();
+  const [stL]=getStatus(d);const stC=stL==='Top'?'#16A34A':stL==='Average'?'#D97706':'#DC2626';
+  const kRows=vk.map(kdef=>{
+    const v=d[kdef.key],p=passKPI(d,kdef);
+    let gap='';
+    if(kdef.key==='aht'&&v!=null){const diff=v-ts2;gap=diff>0?`⬆ ${s2str(diff)} above target`:`✓ ${s2str(-diff)} within target`;}
+    else if(v!=null){const t=+targets[kdef.key]||0;const diff=kdef.dir==='min'?v-t:t-v;gap=diff>=0?`+${fmtNum(diff)} above`:`${fmtNum(Math.abs(diff))} pts gap`;}
+    return {label:kdef.label,key:kdef.key,disp:dispVal(v,kdef),tgt:(kdef.key==='aht'?targets.aht:targets[kdef.key])+(kdef.key!=='aht'?(kdef.unit||''):''),pass:p,gap,steps:STEPS[kdef.key]||[]};
+  });
+  const strengths=kRows.filter(r=>r.pass===true);
+  const gaps=kRows.filter(r=>r.pass===false);
+  const nodata=kRows.filter(r=>r.pass===null);
+  let trendHtml='';
+  if(weekHistory.length>=2){
+    const prev=weekHistory[weekHistory.length-2];const pa=prev.data.find(a=>a.name===d.name);
+    if(pa){const ch=getPct(d)-getPct(pa);trendHtml=`<p style="margin-top:7px;padding:7px 11px;background:${ch>=0?'#DCFCE7':'#FEE2E2'};border-radius:7px;font-size:11px;color:${ch>=0?'#15803D':'#B91C1C'}">
+      ${ch>=0?'▲':'▼'} Week-over-week: <strong>${ch>=0?'+':''}${ch.toFixed(0)}%</strong> vs ${prev.label}</p>`;}
+  }
+  const notes=meetingNotes[d.name];
+  let notesSec=notes?.notes
+    ?`<div class="mn-card"><h5>📝 Meeting Notes</h5><p>${notes.notes.replace(/</g,'&lt;')}</p></div>${notes.analysis?`<div class="ai-plan"><h5>🤖 AI Coaching Plan</h5><div class="ai-plan-body">${notes.analysis.replace(/</g,'&lt;')}</div></div>`:
+      `<div style="margin-top:8px"><button class="btn btn-p btn-sm" onclick="openNotes('${d.name.replace(/'/g,"\\'")}')">🤖 Analyze with AI</button></div>`}`
+    :`<div style="margin-top:10px;padding:10px;background:#F8FAFC;border-radius:8px;border:1px dashed #CBD5E1;font-size:12px;color:#94A3B8;display:flex;align-items:center;gap:10px">
+       <span>No meeting notes yet</span>
+       <button class="btn btn-p btn-sm" onclick="openNotes('${d.name.replace(/'/g,"\\'")}')">+ Add notes</button>
+     </div>`;
+
+  return `<div class="sr">
+    <div class="shd">
+      <div class="av" style="background:${AVC[i%AVC.length]};color:${AVT[i%AVT.length]};width:52px;height:52px;font-size:16px;font-weight:900;flex-shrink:0">${ini(d.name)}</div>
+      <div style="flex:1">
+        <h2>${d.name}</h2>
+        <p style="color:var(--dgray)">Score: <strong style="color:${stC};font-size:15px">${sc}%</strong> &nbsp;|&nbsp; ${pass}/${total} targets met &nbsp;|&nbsp; <strong style="color:${stC}">${stL}</strong></p>
+        ${trendHtml}
+      </div>
+    </div>
+    <p style="font-size:11px;color:#94A3B8;margin-bottom:1.1rem">${period()} · Generated ${new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</p>
+    ${[
+      {c:'#0891B2',l:'S',t:'Specific — Performance Summary',b:`<strong>${d.name}</strong> meets <strong>${pass}/${total}</strong> targets this week.
+        ${strengths.length?`<br>✅ <strong style="color:#15803D">Strengths (${strengths.length}):</strong> ${strengths.map(r=>`${r.label} ${r.disp}`).join(' · ')}`:' '}
+        ${gaps.length?`<br>❌ <strong style="color:#DC2626">Gaps (${gaps.length}):</strong> ${gaps.map(r=>`${r.label} ${r.disp}`).join(' · ')}`:''}
+        ${nodata.length?`<br>⚪ <strong style="color:#94A3B8">No evaluation data:</strong> ${nodata.map(r=>r.label).join(', ')}`:''}` },
+      {c:'#0D9488',l:'M',t:'Measurable — KPI Details',b:kRows.map(r=>{
+        const icon=r.pass===null?'⚪':r.pass?'✅':'❌';
+        return `${icon} <strong>${r.label}:</strong> <strong>${r.disp}</strong> <span style="color:#94A3B8;font-size:11px">(target: ${r.tgt})</span> <span style="font-size:11px;color:${r.pass===null?'#94A3B8':r.pass?'#15803D':'#D97706'}">${r.gap}</span>`;
+      }).join('<br>')},
+      {c:'#7C3AED',l:'A',t:'Action Plan — Step-by-step',b:gaps.length?gaps.map(r=>`<strong style="color:#7C3AED">📌 ${r.label}</strong> (now: ${r.disp} → need: ${r.tgt})<br>${r.steps.map((s,n)=>`<span style="margin-left:8px;display:block;margin-top:3px"><strong style="color:var(--teal)">Step ${n+1}:</strong> ${s}</span>`).join('')}`).join('<br><br>')
+        :`<strong>${d.name}</strong> meets all targets. Action: sustain performance and serve as peer mentor in ${strengths[0]?.label||'top KPIs'}.`},
+      {c:'#DB2777',l:'R',t:'Relevant — Why It Matters',b:gaps.length?`Improving <strong>${gaps.map(r=>r.label).join(', ')}</strong> will:<br>
+        • Directly raise customer satisfaction scores and team NPS<br>
+        • Reduce escalations and cost-per-contact<br>
+        • Move ${d.name} from <strong style="color:${stC}">${stL}</strong> toward <strong style="color:#16A34A">Top performer</strong> status`
+        :`${d.name} consistently meets all targets. Strong results in ${strengths.slice(0,3).map(r=>r.label).join(', ')} support both team goals and customer experience.`},
+      {c:'#D97706',l:'T',t:'Time-bound Development Plan',b:gaps.length?`<strong>Days 1-3:</strong> Review flagged calls + 1-on-1 focusing on ${gaps[0]?.label}.<br>
+          <strong>Week 1:</strong> Steps 1-2 of action plan. Track daily, report to supervisor.<br>
+          <strong>Week 2:</strong> Steps 3-5. Supervisor spot-check 3 calls mid-week.<br>
+          <strong>Week 3:</strong> Checkpoint — target <strong>+5 pts</strong> on each gap KPI.<br>
+          <strong>Week 4:</strong> Full re-evaluation. Goal: reach <strong>${Math.min(100,+sc+15)}%</strong> overall.<br>
+          <strong>Next month:</strong> All ${total} targets met consistently.`
+        :`<strong>This week:</strong> Maintain + document best practices.<br>
+          <strong>Next evaluation:</strong> Sustain ≥${sc}%.<br>
+          <strong>30 days:</strong> Mentor 1-2 peers in ${strengths[0]?.label||'top KPI'}.<br>
+          <strong>Recognition:</strong> Flag for Top Performer award.`},
+    ].map((b,bi)=>`<div class="sb" style="animation-delay:${bi*.07}s">${sbk(b.c,b.l)}<div class="sbody"><h4>${b.t}</h4><p>${b.b}</p></div></div>`).join('')}
+    <div style="border-top:1px solid var(--mgray);padding-top:1rem;margin-top:.5rem">
+      <div style="font-size:11px;font-weight:800;color:var(--dgray);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">📝 Meeting Notes &amp; AI Coaching Plan</div>
+      ${notesSec}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════════════════════
+function closeMo(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}));
+
+// ═══════════════════════════════════════════════════════════
+// TARGETS
+// ═══════════════════════════════════════════════════════════
+function renderTargets(){
+  document.getElementById('tgt-grid').innerHTML=visKPIs().map((kdef,i)=>`
+    <div class="tc" style="animation-delay:${i*.06}s">
+      <label>${kdef.label}</label>
+      <div class="tc-r"><input type="text" id="tgt-${kdef.key}" value="${targets[kdef.key]||kdef.defTgt}">
+      <span class="unit">${kdef.unit||''}</span></div>
+      <div class="dir">${kdef.dir==='max'?'⬇️ Lower is better':'⬆️ Higher is better'}</div>
+    </div>`).join('');
+}
+function saveTgts(){
+  visKPIs().forEach(k=>{const inp=document.getElementById('tgt-'+k.key);if(inp)targets[k.key]=inp.value.trim()});
+  renderOverview();toast('✅ Targets saved!','success');
+  saveToLocal();
+}
+
+// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+function switchTab(t){
+  const tabs=['overview','agents','kpis','targets','compare','insights','smart','upload'];
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',tabs[i]===t));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  if(t==='overview')renderOverview();
+  else if(t==='agents')renderAgents();
+  else if(t==='kpis')renderKPIList();
+  else if(t==='targets')renderTargets();
+  else if(t==='compare'){renderWeekTabs();renderCompare();}
+  else if(t==='insights')renderInsights();
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+// Load saved data FIRST, then render
+const _hadSaved = loadFromLocal();
+if (_hadSaved) {
+  toast('✅ Restored saved data', 'success');
+  setTimeout(() => setSaveStatus('idle'), 100);
+} else {
+  setTimeout(() => setSaveStatus('idle'), 100);
+}
+renderOverview();
+// Animate progress bars on first load
+setTimeout(()=>document.querySelectorAll('.pf').forEach(el=>el.classList.add('animated')),100);
+</script>
+
+</body></html>
